@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '@/lib/api';
+import { apiClient as api } from '@/lib/api';
 import type { ToolrowCoverage, ToolrowSource, ToolrowInvocation } from '@/components/chat/types';
 
 interface ResearchRequest {
@@ -45,8 +45,8 @@ export function useResearch() {
       setLoading(true);
       setError(null);
       
-      const response = await api.post('/research/ask', request);
-      return response.data;
+      const response = await api.post<ResearchResponse>('/research/ask', request);
+      return response;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Research request failed';
       setError(errorMessage);
@@ -58,10 +58,8 @@ export function useResearch() {
 
   const getCoverage = async (searchSpaceId: string, query: string): Promise<ToolrowCoverage> => {
     try {
-      const response = await api.get(`/research/coverage/${searchSpaceId}`, {
-        params: { query }
-      });
-      return response.data;
+      const response = await api.get<ToolrowCoverage>(`/research/coverage/${searchSpaceId}?query=${encodeURIComponent(query)}`);
+      return response;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Coverage check failed';
       setError(errorMessage);
@@ -71,8 +69,8 @@ export function useResearch() {
 
   const previewIntent = async (query: string): Promise<IntentPreview> => {
     try {
-      const response = await api.post('/research/intent-preview', { query });
-      return response.data;
+      const response = await api.post<IntentPreview>('/research/intent-preview', { query });
+      return response;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Intent preview failed';
       setError(errorMessage);
@@ -117,7 +115,7 @@ export function useEnhancedResearch() {
     // Automatically enable live data if coverage is low
     const enhancedRequest = {
       ...request,
-      use_live_data: request.use_live_data || (coverageData?.rag_score && coverageData.rag_score < 0.6),
+      use_live_data: request.use_live_data || (coverageData?.rag_score !== undefined && coverageData.rag_score < 0.6),
     };
 
     return askQuestion(enhancedRequest);

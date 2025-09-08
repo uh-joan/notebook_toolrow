@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { apiClient as api } from '@/lib/api';
 import type { ToolrowCoverage, ToolrowInvocation } from '@/components/chat/types';
 
 interface ToolrowServerStatus {
@@ -27,8 +27,8 @@ export function useToolrowStatus() {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get('/toolrow/health');
-      setStatus(response.data.servers || []);
+      const response = await api.get<{ servers: ToolrowServerStatus[] }>('/toolrow/health');
+      setStatus(response.servers || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch Toolrow status');
       setStatus([]);
@@ -68,8 +68,8 @@ export function useToolrowTools() {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get('/toolrow/tools');
-      setTools(response.data.tools || []);
+      const response = await api.get<{ tools: ToolrowTool[] }>('/toolrow/tools');
+      setTools(response.tools || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch Toolrow tools');
       setTools([]);
@@ -101,10 +101,8 @@ export function useToolrowCoverage(searchSpaceId: string) {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get(`/research/coverage/${searchSpaceId}`, {
-        params: { query }
-      });
-      setCoverage(response.data);
+      const response = await api.get<ToolrowCoverage>(`/research/coverage/${searchSpaceId}?query=${encodeURIComponent(query)}`);
+      setCoverage(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to check coverage');
       setCoverage(null);
@@ -139,7 +137,7 @@ export function useToolrowInvoke() {
       
       setInvocations(prev => [...prev, newInvocation]);
 
-      const response = await api.post('/toolrow/invoke', {
+      const response = await api.post<{ result: any; execution_time_ms?: number }>('/toolrow/invoke', {
         tool,
         params,
       });
@@ -148,8 +146,8 @@ export function useToolrowInvoke() {
         tool,
         params,
         status: 'completed',
-        result: response.data.result,
-        execution_time_ms: response.data.execution_time_ms,
+        result: response.result,
+        execution_time_ms: response.execution_time_ms,
       };
 
       setInvocations(prev => 
@@ -160,7 +158,7 @@ export function useToolrowInvoke() {
         )
       );
 
-      return response.data;
+      return response;
     } catch (err) {
       const failedInvocation: ToolrowInvocation = {
         tool,
