@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "toolrow-gateway": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@uh-joan/toolrow-mcp-server"],
+      "env": ["TOOLROW_API_TOKEN"]
+    }
+  }
+}

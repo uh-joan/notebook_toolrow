@@ -107,6 +107,12 @@ class Config:
     STT_SERVICE_API_BASE = os.getenv("STT_SERVICE_API_BASE")
     STT_SERVICE_API_KEY = os.getenv("STT_SERVICE_API_KEY")
 
+    # Toolrow MCP Configuration
+    TOOLROW_MCP_ENABLED = os.getenv("TOOLROW_MCP_ENABLED", "false").lower() == "true"
+    TOOLROW_API_TOKEN = os.getenv("TOOLROW_API_TOKEN")
+    TOOLROW_MCP_MAX_CALLS_PER_ASK = int(os.getenv("TOOLROW_MCP_MAX_CALLS_PER_ASK", "6"))
+    TOOLROW_MCP_TIMEOUT_MS = int(os.getenv("TOOLROW_MCP_TIMEOUT_MS", "30000"))
+
     # Validation Checks
     # Check embedding dimension
     if (

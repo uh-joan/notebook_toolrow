@@ -15,6 +15,7 @@ from .llm_config_routes import router as llm_config_router
 from .logs_routes import router as logs_router
 from .podcasts_routes import router as podcasts_router
 from .search_source_connectors_routes import router as search_source_connectors_router
+from .toolrow_routes import router as toolrow_router
 from .search_spaces_routes import router as search_spaces_router
 
 router = APIRouter()
@@ -29,3 +30,4 @@ router.include_router(google_gmail_add_connector_router)
 router.include_router(airtable_add_connector_router)
 router.include_router(llm_config_router)
 router.include_router(logs_router)
+router.include_router(toolrow_router)
