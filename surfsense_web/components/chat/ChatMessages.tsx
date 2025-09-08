@@ -11,6 +11,7 @@ import { AnimatedEmptyState } from "@/components/chat/AnimatedEmptyState";
 import { CitationDisplay } from "@/components/chat/ChatCitation";
 import { ChatFurtherQuestions } from "@/components/chat/ChatFurtherQuestions";
 import ChatSourcesDisplay from "@/components/chat/ChatSources";
+import ToolrowSourcesDisplay from "@/components/chat/ToolrowSources";
 import TerminalDisplay from "@/components/chat/ChatTerminal";
 import { languageRenderers } from "@/components/chat/CodeBlock";
 
@@ -50,7 +51,10 @@ function ChatMessageUI({ message, isLast }: { message: Message; isLast: boolean 
 			{message.role === "assistant" ? (
 				<div className="flex-1 flex flex-col space-y-4">
 					<TerminalDisplay message={message} open={isLast} />
-					<ChatSourcesDisplay message={message} />
+					<div className="flex flex-wrap gap-2">
+						<ChatSourcesDisplay message={message} />
+						<ToolrowSourcesDisplay message={message} />
+					</div>
 					<LlamaIndexChatMessage.Content className="flex-1">
 						<LlamaIndexChatMessage.Content.Markdown
 							citationComponent={CitationDisplay}

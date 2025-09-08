@@ -48,3 +48,31 @@ export interface ToolInvocationUIPart {
 }
 
 export type ResearchMode = "QNA" | "REPORT_GENERAL" | "REPORT_DEEP" | "REPORT_DEEPER";
+
+// Toolrow MCP types for frontend
+export interface ToolrowSource {
+	id: string;
+	provider: string;
+	kind: string;
+	canonical_id: string;
+	title: string;
+	uri?: string;
+	metadata: Record<string, any>;
+	last_updated?: string;
+}
+
+export interface ToolrowInvocation {
+	tool: string;
+	params: Record<string, any>;
+	status: "pending" | "running" | "completed" | "failed";
+	result?: any;
+	error?: string;
+	execution_time_ms?: number;
+}
+
+export interface ToolrowCoverage {
+	rag_score: number;
+	live_data_needed: boolean;
+	recommended_tools: string[];
+	confidence: number;
+}

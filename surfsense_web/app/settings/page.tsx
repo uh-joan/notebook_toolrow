@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, Bot, Brain, Settings } from "lucide-react"; // Import ArrowLeft icon
+import { ArrowLeft, Bot, Brain, Settings, Zap } from "lucide-react"; // Import ArrowLeft icon
 import { useRouter } from "next/navigation"; // Add this import
 import { LLMRoleManager } from "@/components/settings/llm-role-manager";
 import { ModelConfigManager } from "@/components/settings/model-config-manager";
+import ToolrowSettings from "@/components/settings/ToolrowSettings";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -42,7 +43,7 @@ export default function SettingsPage() {
 					{/* Settings Content */}
 					<Tabs defaultValue="models" className="space-y-8">
 						<div className="overflow-x-auto">
-							<TabsList className="grid w-full min-w-fit grid-cols-2 lg:w-auto lg:inline-grid">
+							<TabsList className="grid w-full min-w-fit grid-cols-3 lg:w-auto lg:inline-grid">
 								<TabsTrigger value="models" className="flex items-center gap-2 text-sm">
 									<Bot className="h-4 w-4" />
 									<span className="hidden sm:inline">Model Configs</span>
@@ -53,6 +54,11 @@ export default function SettingsPage() {
 									<span className="hidden sm:inline">LLM Roles</span>
 									<span className="sm:hidden">Roles</span>
 								</TabsTrigger>
+								<TabsTrigger value="toolrow" className="flex items-center gap-2 text-sm">
+									<Zap className="h-4 w-4" />
+									<span className="hidden sm:inline">Live Data</span>
+									<span className="sm:hidden">Toolrow</span>
+								</TabsTrigger>
 							</TabsList>
 						</div>
 
@@ -62,6 +68,10 @@ export default function SettingsPage() {
 
 						<TabsContent value="roles" className="space-y-6">
 							<LLMRoleManager />
+						</TabsContent>
+
+						<TabsContent value="toolrow" className="space-y-6">
+							<ToolrowSettings />
 						</TabsContent>
 					</Tabs>
 				</div>
