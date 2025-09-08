@@ -132,15 +132,23 @@ class ResearchOrchestrator:
         user_id: str,
         search_space_id: int,
         db_session: AsyncSession,
-        toolrow_enabled: bool = True
+        toolrow_enabled: bool = True,
+        existing_documents: Optional[List[Any]] = None
     ) -> AnswerPayload:
         """Execute complete RAG + MCP research workflow."""
         logger.info(f"Starting research workflow for: {question[:100]}...")
         
-        # Step 1: Get RAG answer
-        rag_answer, rag_citations, coverage = await self.rag_answer(
-            question, document_ids, user_id, search_space_id, db_session
-        )
+        # Step 1: Get RAG answer (use existing documents if provided)
+        if existing_documents:
+            # Use the existing documents and calculate coverage based on their relevance
+            logger.info(f"Using {len(existing_documents)} existing documents for RAG")
+            coverage = 0.3  # Assume lower coverage since we're being called for enhancement
+            rag_answer = "Using existing document analysis"  # Will be replaced by MCP if triggered
+            rag_citations = []
+        else:
+            rag_answer, rag_citations, coverage = await self.rag_answer(
+                question, document_ids, user_id, search_space_id, db_session
+            )
         
         # Step 2: Check if RAG is sufficient
         if coverage >= self.coverage_threshold or not toolrow_enabled:

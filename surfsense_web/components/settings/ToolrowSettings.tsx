@@ -184,31 +184,94 @@ function ToolCard({ tool }: { tool: any }) {
 }
 
 export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps) {
-	const [toolrowEnabled, setToolrowEnabled] = useState(false);
-	const [apiToken, setApiToken] = useState('');
-	const [maxCalls, setMaxCalls] = useState(6);
-	const [timeout, setTimeout] = useState(30000);
+	// Initialize state from localStorage immediately to prevent flash
+	const [toolrowEnabled, setToolrowEnabled] = useState(() => {
+		if (typeof window !== 'undefined') {
+			const saved = localStorage.getItem('toolrow_settings');
+			if (saved) {
+				try {
+					const settings = JSON.parse(saved);
+					return settings.enabled || false;
+				} catch (error) {
+					console.error('Error loading Toolrow settings:', error);
+				}
+			}
+		}
+		return false;
+	});
+	
+	const [apiToken, setApiToken] = useState(() => {
+		if (typeof window !== 'undefined') {
+			const saved = localStorage.getItem('toolrow_settings');
+			if (saved) {
+				try {
+					const settings = JSON.parse(saved);
+					return settings.apiToken || '';
+				} catch (error) {
+					console.error('Error loading Toolrow settings:', error);
+				}
+			}
+		}
+		return '';
+	});
+	
+	const [maxCalls, setMaxCalls] = useState(() => {
+		if (typeof window !== 'undefined') {
+			const saved = localStorage.getItem('toolrow_settings');
+			if (saved) {
+				try {
+					const settings = JSON.parse(saved);
+					return settings.maxCalls || 6;
+				} catch (error) {
+					console.error('Error loading Toolrow settings:', error);
+				}
+			}
+		}
+		return 6;
+	});
+	
+	const [timeout, setTimeout] = useState(() => {
+		if (typeof window !== 'undefined') {
+			const saved = localStorage.getItem('toolrow_settings');
+			if (saved) {
+				try {
+					const settings = JSON.parse(saved);
+					return settings.timeout || 30000;
+				} catch (error) {
+					console.error('Error loading Toolrow settings:', error);
+				}
+			}
+		}
+		return 30000;
+	});
 	
 	const { status: serverStatus, loading: statusLoading, error: statusError, refresh: refreshStatus, restartServer } = useToolrowStatus();
 	const { tools, loading: toolsLoading, error: toolsError, refresh: refreshTools } = useToolrowTools();
 
-	// Load settings from localStorage
+	// Listen for storage changes from other tabs (simplified since we initialize from localStorage)
 	useEffect(() => {
-		const saved = localStorage.getItem('toolrow_settings');
-		if (saved) {
-			try {
-				const settings = JSON.parse(saved);
-				setToolrowEnabled(settings.enabled || false);
-				setApiToken(settings.apiToken || '');
-				setMaxCalls(settings.maxCalls || 6);
-				setTimeout(settings.timeout || 30000);
-			} catch (error) {
-				console.error('Error loading Toolrow settings:', error);
+		const handleStorageChange = (e: StorageEvent) => {
+			if (e.key === 'toolrow_settings') {
+				const saved = localStorage.getItem('toolrow_settings');
+				if (saved) {
+					try {
+						const settings = JSON.parse(saved);
+						setToolrowEnabled(settings.enabled || false);
+						setApiToken(settings.apiToken || '');
+						setMaxCalls(settings.maxCalls || 6);
+						setTimeout(settings.timeout || 30000);
+					} catch (error) {
+						console.error('Error loading Toolrow settings:', error);
+					}
+				}
 			}
-		}
+		};
+
+		window.addEventListener('storage', handleStorageChange);
+		return () => window.removeEventListener('storage', handleStorageChange);
 	}, []);
 
-	// Save settings to localStorage
+	// Save settings to localStorage  
 	const saveSettings = () => {
 		const settings = {
 			enabled: toolrowEnabled,
@@ -224,7 +287,7 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 	}, [toolrowEnabled, apiToken, maxCalls, timeout]);
 
 	const isConfigured = apiToken.trim() !== '';
-	const hasRunningServers = serverStatus.some(server => server.status === 'running');
+	const hasRunningServers = Array.isArray(serverStatus) && serverStatus.some(server => server.status === 'running');
 
 	return (
 		<div className="space-y-6">
@@ -365,7 +428,7 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 								</div>
 								<Progress value={0} className="h-2" />
 							</div>
-						) : serverStatus.length > 0 ? (
+						) : Array.isArray(serverStatus) && serverStatus.length > 0 ? (
 							<div className="grid gap-4">
 								{serverStatus.map((server) => (
 									<ServerStatusCard

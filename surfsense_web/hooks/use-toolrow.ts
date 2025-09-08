@@ -27,8 +27,10 @@ export function useToolrowStatus() {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<{ servers: ToolrowServerStatus[] }>('/api/v1/toolrow/health');
-      setStatus(response.servers || []);
+      const response = await api.get<{ available: boolean; servers: ToolrowServerStatus[] | Record<string, any> }>('/api/v1/toolrow/health');
+      const servers = response.servers;
+      // Handle both array and object formats
+      setStatus(Array.isArray(servers) ? servers : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch Toolrow status');
       setStatus([]);

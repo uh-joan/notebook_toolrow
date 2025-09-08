@@ -1992,6 +1992,80 @@ async def handle_qna_workflow(
             }
         )
 
+        # Check if we should try Toolrow MCP for enhanced research
+        from app.config import config as app_config
+        if app_config.TOOLROW_MCP_ENABLED and len(relevant_documents + user_selected_documents) < 5:
+            try:
+                writer(
+                    {
+                        "yield_value": streaming_service.format_terminal_info_delta(
+                            "🤖 Checking for live data to enhance answer..."
+                        )
+                    }
+                )
+                
+                # Import and use research orchestrator for enhanced results
+                from app.research.orchestrator import ResearchOrchestrator
+                
+                orchestrator = ResearchOrchestrator()
+                
+                # Calculate coverage and potentially get live data
+                enhanced_result = await orchestrator.rag_then_mcp(
+                    question=user_query,
+                    document_ids=[],  # We already have the documents
+                    user_id=configuration.user_id,
+                    search_space_id=configuration.search_space_id,
+                    db_session=state.db_session,
+                    toolrow_enabled=True,
+                    existing_documents=relevant_documents + user_selected_documents
+                )
+                
+                # If we got enhanced results with live data, use them
+                if enhanced_result.get("tool_invocations") or enhanced_result.get("live_candidates"):
+                    writer(
+                        {
+                            "yield_value": streaming_service.format_terminal_info_delta(
+                                "✨ Enhanced answer with live data from Toolrow!"
+                            )
+                        }
+                    )
+                    
+                    # Use the enhanced answer if it's better
+                    enhanced_answer = enhanced_result.get("answer")
+                    if enhanced_answer and len(enhanced_answer) > len(complete_content):
+                        complete_content = enhanced_answer
+                        
+                        # Add live data sources to annotations
+                        if enhanced_result.get("live_candidates"):
+                            writer(
+                                {
+                                    "yield_value": streaming_service.format_sources(
+                                        enhanced_result["live_candidates"], "toolrow_sources"
+                                    )
+                                }
+                            )
+                            
+                        # Add tool invocation data
+                        if enhanced_result.get("tool_invocations"):
+                            writer(
+                                {
+                                    "yield_value": streaming_service.format_sources(
+                                        enhanced_result["tool_invocations"], "toolrow_invocations"
+                                    )
+                                }
+                            )
+                
+            except Exception as e:
+                # Don't fail the whole request if Toolrow fails
+                print(f"Toolrow enhancement failed (non-critical): {e}")
+                writer(
+                    {
+                        "yield_value": streaming_service.format_terminal_info_delta(
+                            "⚠️ Live data enhancement unavailable, using document sources only"
+                        )
+                    }
+                )
+
         # Return the final answer and captured reranked documents for further question generation
         return {
             "final_written_report": complete_content,
