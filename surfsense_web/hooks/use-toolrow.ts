@@ -43,7 +43,7 @@ export function useToolrowStatus() {
 
   const restartServer = async (serverName: string) => {
     try {
-      await api.post(`/toolrow/restart/${serverName}`);
+      await api.post(`/toolrow/restart/${serverName}`, {});
       await fetchStatus(); // Refresh status after restart
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to restart server');
