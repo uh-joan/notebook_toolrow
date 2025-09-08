@@ -13,9 +13,20 @@ from app.users import SECRET, auth_backend, current_active_user, fastapi_users
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Not needed if you setup a migration system like Alembic
+    # Initialize database
     await create_db_and_tables()
+    
+    # Initialize MCP registry if Toolrow is enabled
+    if config.TOOLROW_MCP_ENABLED:
+        from app.toolrow_mcp.registry import mcp_registry
+        await mcp_registry.initialize()
+    
     yield
+    
+    # Cleanup MCP registry on shutdown
+    if config.TOOLROW_MCP_ENABLED:
+        from app.toolrow_mcp.registry import mcp_registry
+        await mcp_registry.shutdown()
 
 
 app = FastAPI(lifespan=lifespan)
