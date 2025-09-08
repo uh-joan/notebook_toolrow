@@ -45,7 +45,7 @@ export function useResearch() {
       setLoading(true);
       setError(null);
       
-      const response = await api.post<ResearchResponse>('/research/ask', request);
+      const response = await api.post<ResearchResponse>('/api/v1/research/ask', request);
       return response;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Research request failed';
@@ -58,7 +58,7 @@ export function useResearch() {
 
   const getCoverage = async (searchSpaceId: string, query: string): Promise<ToolrowCoverage> => {
     try {
-      const response = await api.get<ToolrowCoverage>(`/research/coverage/${searchSpaceId}?query=${encodeURIComponent(query)}`);
+      const response = await api.get<ToolrowCoverage>(`/api/v1/research/coverage/${searchSpaceId}?query=${encodeURIComponent(query)}`);
       return response;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Coverage check failed';
@@ -69,7 +69,7 @@ export function useResearch() {
 
   const previewIntent = async (query: string): Promise<IntentPreview> => {
     try {
-      const response = await api.post<IntentPreview>('/research/intent-preview', { query });
+      const response = await api.post<IntentPreview>('/api/v1/research/intent-preview', { query });
       return response;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Intent preview failed';

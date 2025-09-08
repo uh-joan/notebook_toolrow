@@ -27,7 +27,7 @@ export function useToolrowStatus() {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<{ servers: ToolrowServerStatus[] }>('/toolrow/health');
+      const response = await api.get<{ servers: ToolrowServerStatus[] }>('/api/v1/toolrow/health');
       setStatus(response.servers || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch Toolrow status');
@@ -43,7 +43,7 @@ export function useToolrowStatus() {
 
   const restartServer = async (serverName: string) => {
     try {
-      await api.post(`/toolrow/restart/${serverName}`, {});
+      await api.post(`/api/v1/toolrow/restart/${serverName}`, {});
       await fetchStatus(); // Refresh status after restart
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to restart server');
@@ -68,7 +68,7 @@ export function useToolrowTools() {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<{ tools: ToolrowTool[] }>('/toolrow/tools');
+      const response = await api.get<{ tools: ToolrowTool[] }>('/api/v1/toolrow/tools');
       setTools(response.tools || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch Toolrow tools');
@@ -101,7 +101,7 @@ export function useToolrowCoverage(searchSpaceId: string) {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<ToolrowCoverage>(`/research/coverage/${searchSpaceId}?query=${encodeURIComponent(query)}`);
+      const response = await api.get<ToolrowCoverage>(`/api/v1/research/coverage/${searchSpaceId}?query=${encodeURIComponent(query)}`);
       setCoverage(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to check coverage');
@@ -137,7 +137,7 @@ export function useToolrowInvoke() {
       
       setInvocations(prev => [...prev, newInvocation]);
 
-      const response = await api.post<{ result: any; execution_time_ms?: number }>('/toolrow/invoke', {
+      const response = await api.post<{ result: any; execution_time_ms?: number }>('/api/v1/toolrow/invoke', {
         tool,
         params,
       });
