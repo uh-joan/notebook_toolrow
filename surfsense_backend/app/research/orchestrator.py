@@ -21,6 +21,7 @@ from app.toolrow_mcp.types import (
 )
 
 from .routing import IntentDetector, ToolRouter
+from .coverage import CoverageAnalyzer, CoverageAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class ResearchOrchestrator:
     def __init__(self):
         self.intent_detector = IntentDetector()
         self.tool_router = ToolRouter()
+        self.coverage_analyzer = CoverageAnalyzer()
         self.coverage_threshold = 0.6  # Configurable threshold
         
     async def rag_answer(
@@ -150,9 +152,19 @@ class ResearchOrchestrator:
                 question, document_ids, user_id, search_space_id, db_session
             )
         
-        # Step 2: Check if RAG is sufficient
-        if coverage >= self.coverage_threshold or not toolrow_enabled:
-            logger.info(f"RAG sufficient (coverage: {coverage:.2f}) or MCP disabled")
+        # Step 2: Check if we need live data enhancement
+        # First get intent to determine if comprehensive check is needed
+        intent = await self.detect_intent(question)
+        
+        # Enhanced logic: call MCP if comprehensive query OR low document coverage
+        needs_live_data = (
+            intent.get("requires_completeness_check", False) or  # Comprehensive query
+            coverage < self.coverage_threshold or                 # Low RAG coverage
+            (existing_documents and len(existing_documents) < 3)  # Very few documents
+        )
+        
+        if not needs_live_data or not toolrow_enabled:
+            logger.info(f"Live data not needed (coverage: {coverage:.2f}, comprehensive: {intent.get('requires_completeness_check', False)}) or MCP disabled")
             return AnswerPayload(
                 answer=rag_answer,
                 citations=rag_citations,
@@ -161,19 +173,22 @@ class ResearchOrchestrator:
                 tool_invocations=[]
             )
         
-        # Step 3: RAG coverage is low, invoke MCP
-        logger.info(f"RAG coverage low ({coverage:.2f}), invoking MCP tools...")
+        # Step 3: Enhanced research with live data
+        reason = "comprehensive query" if intent.get("requires_completeness_check") else f"low coverage ({coverage:.2f})"
+        logger.info(f"🌐 Invoking live data enhancement - {reason}")
         
         try:
-            # Detect intent and canonicalize
-            intent = await self.detect_intent(question)
+            # We already have intent, now canonicalize
+            logger.info("🔧 Canonicalizing query...")
             canonicalized = await self.canonicalize_query(question)
+            logger.info(f"📝 Canonicalized query: {canonicalized}")
             
             # Route to appropriate tools
+            logger.info("🛣️ Routing to appropriate Toolrow tools...")
             tool_calls = await self.route_tools(intent, canonicalized)
             
             if not tool_calls:
-                logger.info("No appropriate tools found for query")
+                logger.info("❌ No appropriate tools found for query")
                 return AnswerPayload(
                     answer=rag_answer,
                     citations=rag_citations,
@@ -182,21 +197,54 @@ class ResearchOrchestrator:
                     tool_invocations=[]
                 )
             
+            logger.info(f"🎯 Found {len(tool_calls)} matching tools:")
+            for i, tool_call in enumerate(tool_calls, 1):
+                logger.info(f"   🔧 Tool {i}: {tool_call['tool']}")
+                logger.info(f"   📋 Params {i}: {tool_call['params']}")
+                logger.info(f"   ⏱️ Timeout {i}: {tool_call.get('timeout_ms', 30000)}ms")
+            
             # Execute tools in parallel (respecting budget limits)
             max_calls = min(len(tool_calls), config.TOOLROW_MCP_MAX_CALLS_PER_ASK)
             limited_tool_calls = tool_calls[:max_calls]
             
-            logger.info(f"Executing {len(limited_tool_calls)} MCP tool calls")
+            if len(limited_tool_calls) < len(tool_calls):
+                logger.info(f"⚠️ Limited to {len(limited_tool_calls)} calls (max: {config.TOOLROW_MCP_MAX_CALLS_PER_ASK})")
+            
+            logger.info(f"🚀 Executing {len(limited_tool_calls)} MCP tool calls in parallel...")
+            for i, tool_call in enumerate(limited_tool_calls, 1):
+                logger.info(f"   📞 Calling {i}/{len(limited_tool_calls)}: {tool_call['tool']} with {tool_call['params']}")
+            
             mcp_results = await toolrow_mcp_manager.parallel_invoke(
                 limited_tool_calls,
                 timeout_ms=config.TOOLROW_MCP_TIMEOUT_MS
             )
             
+            logger.info(f"✅ MCP calls completed. Results summary:")
+            for i, (tool_call, result) in enumerate(zip(limited_tool_calls, mcp_results), 1):
+                if hasattr(result, 'success') and result.success:
+                    result_preview = str(result.result)[:100] + "..." if len(str(result.result)) > 100 else str(result.result)
+                    logger.info(f"   ✅ {i}. {tool_call['tool']}: SUCCESS - {result_preview}")
+                else:
+                    error_msg = getattr(result, 'error', 'Unknown error')
+                    logger.info(f"   ❌ {i}. {tool_call['tool']}: FAILED - {error_msg}")
+            
+            
             # Normalize results to EntityRecords
             live_candidates = await self._normalize_mcp_results(mcp_results, limited_tool_calls)
             
-            # Synthesize final answer
-            final_answer = await self._synthesize_answer(rag_answer, live_candidates, question)
+            # Perform coverage analysis if we have existing documents
+            coverage_analysis = None
+            if existing_documents:
+                logger.info("📊 Analyzing knowledge coverage...")
+                coverage_analysis = await self.coverage_analyzer.analyze_coverage(
+                    existing_documents, live_candidates, intent
+                )
+                logger.info(f"📈 Coverage analysis: {coverage_analysis}")
+            
+            # Synthesize final answer with coverage context
+            final_answer = await self._synthesize_answer_with_coverage(
+                rag_answer, live_candidates, question, coverage_analysis
+            )
             
             # Create live citations
             live_citations = self._create_live_citations(live_candidates, limited_tool_calls)
@@ -382,6 +430,78 @@ class ResearchOrchestrator:
             return rag_answer + live_section
         
         return rag_answer
+    
+    async def _synthesize_answer_with_coverage(
+        self,
+        rag_answer: str,
+        live_candidates: List[EntityRecord],
+        question: str,
+        coverage_analysis: Optional[CoverageAnalysis] = None
+    ) -> str:
+        """Synthesize answer with intelligent coverage reporting."""
+        
+        # If no coverage analysis, fall back to basic synthesis
+        if not coverage_analysis:
+            return await self._synthesize_answer(rag_answer, live_candidates, question)
+        
+        # Build coverage-aware response
+        response_parts = []
+        
+        # Start with the original answer
+        response_parts.append(rag_answer)
+        
+        # Add coverage insights
+        if coverage_analysis.has_gaps:
+            # Format the gap analysis
+            found_count = len(coverage_analysis.found_entities)
+            total_count = len(coverage_analysis.live_entities)
+            missing_count = len(coverage_analysis.missing_entities)
+            
+            coverage_section = f"""
+
+📊 **Knowledge Coverage Analysis:**
+Your documents contain {found_count} of {total_count} available entities ({coverage_analysis.completeness_score:.1%} coverage).
+"""
+            
+            if coverage_analysis.found_entities:
+                coverage_section += f"""
+📚 **Found in your documents ({found_count}):**
+{', '.join(coverage_analysis.found_entities[:10])}{'...' if len(coverage_analysis.found_entities) > 10 else ''}
+"""
+            
+            if coverage_analysis.missing_entities:
+                coverage_section += f"""
+🌐 **Additional from live data ({missing_count}):**
+{', '.join(coverage_analysis.missing_entities[:10])}{'...' if len(coverage_analysis.missing_entities) > 10 else ''}
+"""
+            
+            response_parts.append(coverage_section)
+            
+            # Add detailed info about missing entities
+            if live_candidates:
+                live_details = []
+                for candidate in live_candidates[:5]:  # Top 5 missing
+                    title = candidate.get("title", "Unknown")
+                    summary = candidate.get("summary", "")
+                    if summary:
+                        live_details.append(f"• **{title}**: {summary[:150]}...")
+                    else:
+                        live_details.append(f"• **{title}**")
+                
+                if live_details:
+                    response_parts.append(f"""
+📋 **Details on additional entities:**
+{chr(10).join(live_details)}
+""")
+        
+        else:
+            # High coverage - just mention completeness
+            response_parts.append(f"""
+
+✅ **Your knowledge base appears comprehensive** ({coverage_analysis.completeness_score:.1%} coverage of available data).
+""")
+        
+        return "".join(response_parts)
     
     def _create_live_citations(
         self,

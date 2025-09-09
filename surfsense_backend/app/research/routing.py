@@ -49,6 +49,16 @@ class IntentDetector:
             r"(?:WHO|health\s+organization).*(?:data|statistics?)",
         ]
         
+        # Comprehensive query patterns (requiring completeness check)
+        self.comprehensive_patterns = [
+            r"(?:all|complete|full|entire|comprehensive|total).*(?:list|drugs?|medications?|treatments?|therapies?)",
+            r"(?:what|which|how\s+many).*(?:drugs?|medications?|treatments?).*(?:are|exist|available|approved|marketed)",
+            r"(?:available|approved|marketed|existing).*(?:drugs?|medications?|treatments?).*(?:for|treating|in\s+the)",
+            r"(?:other|additional|more|alternative|remaining).*(?:drugs?|medications?|treatments?|options)",
+            r"(?:complete|full|comprehensive).*(?:overview|summary|analysis).*(?:of|for)",
+            r"(?:market|industry).*(?:overview|analysis|landscape).*(?:drugs?|medications?|treatments?)",
+        ]
+        
         # Region patterns
         self.region_patterns = [
             r"\b(US|USA|United States|America|American)\b",
@@ -75,7 +85,8 @@ class IntentDetector:
             conditions=[],
             regions=[],
             time_range=None,
-            confidence=0.5
+            confidence=0.5,
+            requires_completeness_check=False
         )
         
         # Determine primary category
@@ -95,6 +106,10 @@ class IntentDetector:
         # Extract time range
         time_range = self._extract_time_range(question_lower)
         intent["time_range"] = time_range
+        
+        # Check if this is a comprehensive query requiring completeness check
+        is_comprehensive = self._is_comprehensive_query(question_lower)
+        intent["requires_completeness_check"] = is_comprehensive
         
         logger.debug(f"Detected intent: {intent}")
         return intent
@@ -207,6 +222,17 @@ class IntentDetector:
                 return match.group(0)
         
         return None
+    
+    def _is_comprehensive_query(self, question: str) -> bool:
+        """Check if query requires comprehensive/complete information."""
+        import re
+        
+        for pattern in self.comprehensive_patterns:
+            if re.search(pattern, question, re.IGNORECASE):
+                logger.debug(f"Comprehensive pattern matched: {pattern}")
+                return True
+        
+        return False
 
 
 class ToolRouter:

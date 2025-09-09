@@ -57,6 +57,7 @@ class Intent(TypedDict, total=False):
     regions: List[str]  # Geographic regions (US, EU, etc.)
     time_range: Optional[str]  # Time range for searches
     confidence: float  # Confidence score 0-1
+    requires_completeness_check: bool  # True for comprehensive queries
 
 
 # Tool call definitions

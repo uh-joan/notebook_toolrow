@@ -2010,15 +2010,46 @@ async def handle_qna_workflow(
                 orchestrator = ResearchOrchestrator()
                 
                 # Calculate coverage and potentially get live data
-                enhanced_result = await orchestrator.rag_then_mcp(
-                    question=user_query,
-                    document_ids=[],  # We already have the documents
-                    user_id=configuration.user_id,
-                    search_space_id=configuration.search_space_id,
-                    db_session=state.db_session,
-                    toolrow_enabled=True,
-                    existing_documents=relevant_documents + user_selected_documents
-                )
+                import logging
+                
+                # Create a custom logging handler to capture Toolrow logs for streaming
+                class ToolrowStreamHandler(logging.Handler):
+                    def __init__(self, writer, streaming_service):
+                        super().__init__()
+                        self.writer = writer
+                        self.streaming_service = streaming_service
+                        
+                    def emit(self, record):
+                        if 'app.research.orchestrator' in record.name:
+                            log_msg = record.getMessage()
+                            # Only stream Toolrow-specific logs (with emojis)
+                            if any(emoji in log_msg for emoji in ['🔍', '📊', '🔧', '📝', '🛣️', '🎯', '⚠️', '🚀', '✅', '❌', '📋', '⏱️', '📞', '🌐', '📈']):
+                                self.writer({
+                                    "yield_value": self.streaming_service.format_terminal_info_delta(log_msg)
+                                })
+                
+                # Set up the custom handler temporarily
+                toolrow_logger = logging.getLogger('app.research.orchestrator')
+                original_level = toolrow_logger.level
+                stream_handler = ToolrowStreamHandler(writer, streaming_service)
+                stream_handler.setLevel(logging.INFO)
+                toolrow_logger.addHandler(stream_handler)
+                toolrow_logger.setLevel(logging.INFO)
+                
+                try:
+                    enhanced_result = await orchestrator.rag_then_mcp(
+                        question=user_query,
+                        document_ids=[],  # We already have the documents
+                        user_id=configuration.user_id,
+                        search_space_id=configuration.search_space_id,
+                        db_session=state.db_session,
+                        toolrow_enabled=True,
+                        existing_documents=relevant_documents + user_selected_documents
+                    )
+                finally:
+                    # Clean up the handler
+                    toolrow_logger.removeHandler(stream_handler)
+                    toolrow_logger.setLevel(original_level)
                 
                 # If we got enhanced results with live data, use them
                 if enhanced_result.get("tool_invocations") or enhanced_result.get("live_candidates"):
