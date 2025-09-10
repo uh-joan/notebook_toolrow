@@ -120,7 +120,7 @@ class ToolrowMCPClient:
     async def invoke_tool(self, tool_name: str, params: Dict[str, Any], timeout_ms: int = 30000) -> Dict[str, Any]:
         """Invoke a specific tool on the MCP server."""
         try:
-            logger.debug(f"Invoking MCP tool: {tool_name} with params: {list(params.keys())}")
+            logger.info(f"🔧 Invoking MCP tool: {tool_name} with params: {params}")
             
             request_params = {
                 "name": tool_name,
@@ -128,11 +128,11 @@ class ToolrowMCPClient:
             }
             
             result = await self._send_request("tools/call", request_params, timeout_ms)
-            logger.debug(f"MCP tool {tool_name} completed successfully")
+            logger.info(f"✅ MCP tool {tool_name} result: {str(result)[:200]}...")
             return result
             
         except Exception as e:
-            logger.error(f"Failed to invoke MCP tool {tool_name}: {e}")
+            logger.error(f"❌ Failed to invoke MCP tool {tool_name}: {type(e).__name__}: {e}")
             raise
     
     async def health_check(self) -> bool:
