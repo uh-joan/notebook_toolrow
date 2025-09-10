@@ -49,6 +49,7 @@ class DocumentType(str, Enum):
     GOOGLE_CALENDAR_CONNECTOR = "GOOGLE_CALENDAR_CONNECTOR"
     GOOGLE_GMAIL_CONNECTOR = "GOOGLE_GMAIL_CONNECTOR"
     AIRTABLE_CONNECTOR = "AIRTABLE_CONNECTOR"
+    DISCOVERED_SOURCE = "DISCOVERED_SOURCE"
 
 
 class SearchSourceConnectorType(str, Enum):
@@ -73,6 +74,7 @@ class ChatType(str, Enum):
     REPORT_GENERAL = "REPORT_GENERAL"
     REPORT_DEEP = "REPORT_DEEP"
     REPORT_DEEPER = "REPORT_DEEPER"
+    DISCOVERY = "DISCOVERY"
 
 
 class LiteLLMProvider(str, Enum):
@@ -290,6 +292,27 @@ class Log(BaseModel, TimestampMixin):
     search_space = relationship("SearchSpace", back_populates="logs")
 
 
+class ToolrowSettings(BaseModel, TimestampMixin):
+    __tablename__ = "toolrow_settings"
+
+    api_token = Column(Text, nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    max_calls = Column(Integer, nullable=False, default=6)
+    timeout_ms = Column(Integer, nullable=False, default=30000)
+    updated_at = Column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        index=True,
+    )
+
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    user = relationship("User", back_populates="toolrow_settings")
+
+
 if config.AUTH_TYPE == "GOOGLE":
 
     class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
@@ -307,6 +330,12 @@ if config.AUTH_TYPE == "GOOGLE":
             "LLMConfig",
             back_populates="user",
             foreign_keys="LLMConfig.user_id",
+            cascade="all, delete-orphan",
+        )
+        toolrow_settings = relationship(
+            "ToolrowSettings",
+            back_populates="user",
+            uselist=False,  # One-to-one relationship
             cascade="all, delete-orphan",
         )
 
@@ -341,6 +370,12 @@ else:
             "LLMConfig",
             back_populates="user",
             foreign_keys="LLMConfig.user_id",
+            cascade="all, delete-orphan",
+        )
+        toolrow_settings = relationship(
+            "ToolrowSettings",
+            back_populates="user",
+            uselist=False,  # One-to-one relationship
             cascade="all, delete-orphan",
         )
 
