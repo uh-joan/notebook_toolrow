@@ -1,4 +1,4 @@
-"""Research API routes integrating RAG with Toolrow MCP."""
+"""Research API routes using the original researcher agent workflow."""
 
 import logging
 from typing import List
@@ -9,8 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import config
 from app.db import SearchSpace, User, get_async_session
-from app.research.orchestrator import ResearchOrchestrator
-from app.toolrow_mcp.types import AnswerPayload, Citation, EntityRecord, ToolCall
 from app.users import current_active_user
 from app.utils.check_ownership import check_ownership
 
@@ -23,17 +21,13 @@ class ResearchAskRequest(BaseModel):
     """Request model for research ask endpoint."""
     question: str
     selected_source_ids: List[int] = []
-    toolrow_enabled: bool = True
     search_space_id: int
 
 
 class ResearchAskResponse(BaseModel):
     """Response model for research ask endpoint."""
     answer: str
-    citations: List[dict]  # Using dict for flexible citation types
-    coverage: float
-    live_candidates: List[dict] = []
-    tool_invocations: List[dict] = []
+    citations: List[dict] = []  # Basic citations from original researcher
     errors: List[str] = []
 
 
@@ -44,13 +38,10 @@ async def research_ask(
     user: User = Depends(current_active_user),
 ):
     """
-    Execute research workflow combining RAG and Toolrow MCP.
+    Execute original researcher workflow using pure RAG over existing documents.
     
-    This endpoint:
-    1. Performs RAG search on selected documents
-    2. Calculates coverage score
-    3. If coverage is low and Toolrow is enabled, calls MCP tools
-    4. Synthesizes final answer with citations
+    This endpoint uses the same researcher agent as the chat interface,
+    but returns a structured response instead of streaming.
     """
     try:
         logger.info(f"Research request from user {user.id}: {request.question[:100]}...")
@@ -58,38 +49,32 @@ async def research_ask(
         # Check if user owns the search space
         await check_ownership(session, SearchSpace, request.search_space_id, user)
         
-        # Check if Toolrow MCP is enabled
-        toolrow_enabled = request.toolrow_enabled and config.TOOLROW_MCP_ENABLED
+        # Use the original researcher workflow
+        from app.tasks.stream_connector_search_results import stream_connector_search_results
         
-        if not toolrow_enabled:
-            logger.info("Toolrow MCP disabled, using RAG-only mode")
-        
-        # Create orchestrator and execute research workflow
-        orchestrator = ResearchOrchestrator()
-        
-        result = await orchestrator.rag_then_mcp(
-            question=request.question,
-            document_ids=request.selected_source_ids,
+        # Collect all streaming output
+        full_answer = ""
+        async for chunk in stream_connector_search_results(
+            user_query=request.question,
             user_id=str(user.id),
             search_space_id=request.search_space_id,
-            db_session=session,
-            toolrow_enabled=toolrow_enabled
-        )
+            session=session,
+            research_mode="QNA",  # Use QNA mode for direct answers
+            selected_connectors=[],  # Only use selected documents
+            langchain_chat_history=[],
+            search_mode_str="CHUNKS",
+            document_ids_to_add_in_context=request.selected_source_ids,
+        ):
+            full_answer += chunk
         
-        # Convert result to response format
+        # For now, return simplified response (could be enhanced to extract citations)
         response = ResearchAskResponse(
-            answer=result.get("answer", ""),
-            citations=result.get("citations", []),
-            coverage=result.get("coverage", 0.0),
-            live_candidates=result.get("live_candidates", []),
-            tool_invocations=result.get("tool_invocations", []),
-            errors=result.get("errors", [])
+            answer=full_answer.strip(),
+            citations=[],  # Could extract from the full_answer if needed
+            errors=[]
         )
         
-        logger.info(f"Research completed: {len(response.citations)} citations, "
-                   f"{len(response.live_candidates)} live results, "
-                   f"coverage: {response.coverage:.2f}")
-        
+        logger.info(f"Original research workflow completed")
         return response
         
     except HTTPException:
@@ -149,41 +134,3 @@ async def get_coverage_info(
         )
 
 
-@router.get("/intent-preview")
-async def preview_intent(
-    question: str,
-    session: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
-):
-    """Preview intent detection and tool routing for a question (development)."""
-    try:
-        if not config.TOOLROW_MCP_ENABLED:
-            raise HTTPException(
-                status_code=503,
-                detail="Toolrow MCP is not enabled"
-            )
-        
-        orchestrator = ResearchOrchestrator()
-        
-        # Detect intent
-        intent = await orchestrator.detect_intent(question)
-        
-        # Canonicalize query
-        canonicalized = await orchestrator.canonicalize_query(question)
-        
-        # Route to tools
-        tool_calls = await orchestrator.route_tools(intent, canonicalized)
-        
-        return {
-            "question": question,
-            "intent": intent,
-            "canonicalized": canonicalized,
-            "tool_calls": tool_calls
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in intent preview: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Intent preview failed: {str(e)}"
-        )

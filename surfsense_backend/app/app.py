@@ -77,6 +77,10 @@ if config.AUTH_TYPE == "GOOGLE":
 
 app.include_router(crud_router, prefix="/api/v1", tags=["crud"])
 
+# Include source discovery routes
+from app.routes.source_discovery import router as source_discovery_router
+app.include_router(source_discovery_router)
+
 
 @app.get("/verify-token")
 async def authenticated_route(

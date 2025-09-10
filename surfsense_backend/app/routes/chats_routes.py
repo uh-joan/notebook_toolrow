@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain.schema import AIMessage, HumanMessage
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -125,8 +125,15 @@ async def read_chats(
     search_space_id: int | None = None,
     session: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
+    request: Request = None,
 ):
     try:
+        # Debug: Log the bearer token
+        auth_header = request.headers.get("authorization") if request else None
+        token = auth_header.replace("Bearer ", "") if auth_header and auth_header.startswith("Bearer ") else None
+        print(f"🔑 Debug: Bearer token: {token}")
+        print(f"🔍 Debug: Request params - skip: {skip}, limit: {limit}, search_space_id: {search_space_id}")
+        
         # Select specific fields excluding messages
         query = (
             select(
@@ -145,8 +152,18 @@ async def read_chats(
         if search_space_id is not None:
             query = query.filter(Chat.search_space_id == search_space_id)
 
+        # Order by created_at descending (newest first)
+        query = query.order_by(Chat.created_at.desc())
+
         result = await session.execute(query.offset(skip).limit(limit))
-        return result.all()
+        chats = result.all()
+        
+        # Debug: Log the results
+        print(f"🔍 Debug: Found {len(chats)} chats")
+        for chat in chats:
+            print(f"🔍 Debug: Chat {chat.id} - type: {chat.type}, title: {chat.title}, created_at: {chat.created_at}")
+        
+        return chats
     except OperationalError:
         raise HTTPException(
             status_code=503, detail="Database operation failed. Please try again later."

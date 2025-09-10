@@ -16,8 +16,10 @@ from .logs_routes import router as logs_router
 from .podcasts_routes import router as podcasts_router
 from .search_source_connectors_routes import router as search_source_connectors_router
 from .toolrow_routes import router as toolrow_router
+from .toolrow_settings_routes import router as toolrow_settings_router
 from .research_routes import router as research_router
 from .search_spaces_routes import router as search_spaces_router
+from .source_discovery import router as source_discovery_router
 
 router = APIRouter()
 
@@ -32,4 +34,6 @@ router.include_router(airtable_add_connector_router)
 router.include_router(llm_config_router)
 router.include_router(logs_router)
 router.include_router(toolrow_router)
+router.include_router(toolrow_settings_router)
+router.include_router(source_discovery_router)
 router.include_router(research_router)
