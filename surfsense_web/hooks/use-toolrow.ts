@@ -27,10 +27,26 @@ export function useToolrowStatus() {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<{ available: boolean; servers: ToolrowServerStatus[] | Record<string, any> }>('/api/v1/toolrow/health');
-      const servers = response.servers;
-      // Handle both array and object formats
-      setStatus(Array.isArray(servers) ? servers : []);
+      // The backend returns ServerStatusResponse, need to map to ToolrowServerStatus
+      const servers = await api.get<Array<{
+        name: string;
+        running: boolean;
+        restart_count: number;
+        pid: number | null;
+        tools: any[];
+      }>>('/api/v1/toolrow/servers');
+      
+      // Filter out sequential-thinking since it's not relevant for live data settings
+      const relevantServers = servers.filter(server => server.name !== 'sequential-thinking');
+      
+      const formattedServers: ToolrowServerStatus[] = relevantServers.map(server => ({
+        name: server.name,
+        status: server.running ? 'running' : 'stopped',
+        tools_count: server.tools?.length || 0,
+        last_restart: undefined, // Not provided by backend
+        error: undefined // Not provided by backend
+      }));
+      setStatus(formattedServers);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch Toolrow status');
       setStatus([]);

@@ -11,6 +11,7 @@ import {
 	type LucideIcon,
 	MessageCircleMore,
 	Podcast,
+	Search,
 	Settings2,
 	SquareLibrary,
 	SquareTerminal,
@@ -48,6 +49,7 @@ export const iconMap: Record<string, LucideIcon> = {
 	ExternalLink,
 	Trash2,
 	Podcast,
+	Search,
 	FileText,
 };
 

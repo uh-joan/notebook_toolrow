@@ -230,7 +230,7 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 		return 6;
 	});
 	
-	const [timeout, setTimeout] = useState(() => {
+	const [timeout, setTimeoutValue] = useState(() => {
 		if (typeof window !== 'undefined') {
 			const saved = localStorage.getItem('toolrow_settings');
 			if (saved) {
@@ -248,6 +248,40 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 	const { status: serverStatus, loading: statusLoading, error: statusError, refresh: refreshStatus, restartServer } = useToolrowStatus();
 	const { tools, loading: toolsLoading, error: toolsError, refresh: refreshTools } = useToolrowTools();
 
+	// Load settings from database on mount
+	useEffect(() => {
+		const loadSettings = async () => {
+			try {
+				const token = localStorage.getItem("surfsense_bearer_token");
+				if (!token) return;
+
+				const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL}/api/v1/toolrow-settings/`, {
+					method: "GET",
+					headers: {
+						"Authorization": `Bearer ${token}`,
+					},
+				});
+
+				if (response.ok) {
+					const settings = await response.json();
+					if (settings) {
+						setToolrowEnabled(settings.enabled);
+						setMaxCalls(settings.max_calls);
+						setTimeoutValue(settings.timeout_ms);
+						// Don't load the actual token for security, just show if it exists
+						if (settings.has_token) {
+							setApiToken("***CONFIGURED***"); // Placeholder to show token exists
+						}
+					}
+				}
+			} catch (error) {
+				console.error("Failed to load ToolRow settings:", error);
+			}
+		};
+
+		loadSettings();
+	}, []);
+
 	// Listen for storage changes from other tabs (simplified since we initialize from localStorage)
 	useEffect(() => {
 		const handleStorageChange = (e: StorageEvent) => {
@@ -259,7 +293,7 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 						setToolrowEnabled(settings.enabled || false);
 						setApiToken(settings.apiToken || '');
 						setMaxCalls(settings.maxCalls || 6);
-						setTimeout(settings.timeout || 30000);
+						setTimeoutValue(settings.timeout || 30000);
 					} catch (error) {
 						console.error('Error loading Toolrow settings:', error);
 					}
@@ -271,19 +305,45 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 		return () => window.removeEventListener('storage', handleStorageChange);
 	}, []);
 
-	// Save settings to localStorage  
-	const saveSettings = () => {
-		const settings = {
-			enabled: toolrowEnabled,
-			apiToken,
-			maxCalls,
-			timeout,
-		};
-		localStorage.setItem('toolrow_settings', JSON.stringify(settings));
+	// Save settings to database
+	const saveSettings = async () => {
+		try {
+			const token = localStorage.getItem("surfsense_bearer_token");
+			if (!token) return;
+
+			const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL}/api/v1/toolrow-settings/`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Authorization": `Bearer ${token}`,
+				},
+				body: JSON.stringify({
+					api_token: apiToken,
+					enabled: toolrowEnabled,
+					max_calls: maxCalls,
+					timeout_ms: timeout,
+				}),
+			});
+
+			if (!response.ok) {
+				throw new Error(`Failed to save settings: ${response.statusText}`);
+			}
+
+			console.log("✅ ToolRow settings saved successfully");
+		} catch (error) {
+			console.error("❌ Failed to save ToolRow settings:", error);
+		}
 	};
 
 	useEffect(() => {
-		saveSettings();
+		// Auto-save when settings change (with debounce)
+		const timeoutId = setTimeout(() => {
+			if (apiToken.trim()) { // Only save if token is provided
+				saveSettings();
+			}
+		}, 1000);
+
+		return () => clearTimeout(timeoutId);
 	}, [toolrowEnabled, apiToken, maxCalls, timeout]);
 
 	const isConfigured = apiToken.trim() !== '';
@@ -293,7 +353,7 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 		<div className="space-y-6">
 			<div className="flex items-center gap-2">
 				<Zap className="h-5 w-5" />
-				<h2 className="text-lg font-semibold">Toolrow Live Data</h2>
+				<h2 className="text-lg font-semibold">Discovery Agent - Live Data</h2>
 				<Badge variant="outline" className="text-xs">
 					{toolrowEnabled && isConfigured ? 'Enabled' : 'Disabled'}
 				</Badge>
@@ -306,7 +366,7 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 						Configuration
 					</CardTitle>
 					<CardDescription>
-						Configure Toolrow MCP for live data integration in your research workflows.
+						Configure Toolrow MCP for the Discovery Agent to fetch live external data from clinical trials, FDA, PubMed, and more.
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-4">
@@ -316,7 +376,7 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 								Enable Toolrow Integration
 							</Label>
 							<p className="text-xs text-muted-foreground mt-1">
-								Allow SurfSense to fetch live data during research
+								Allow Discovery Agent to access external APIs for live data discovery
 							</p>
 						</div>
 						<Switch
@@ -338,7 +398,7 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 									onChange={(e) => setApiToken(e.target.value)}
 								/>
 								<p className="text-xs text-muted-foreground">
-									Get your API token from <a href="https://toolrow.com" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">toolrow.com</a>
+									Get your API token from <a href="https://toolrow.ai" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">toolrow.ai</a>
 								</p>
 							</div>
 
@@ -363,7 +423,7 @@ export default function ToolrowSettings({ searchSpaceId }: ToolrowSettingsProps)
 										max="60000"
 										step="5000"
 										value={timeout}
-										onChange={(e) => setTimeout(Number(e.target.value))}
+										onChange={(e) => setTimeoutValue(Number(e.target.value))}
 									/>
 								</div>
 							</div>

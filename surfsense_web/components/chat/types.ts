@@ -49,6 +49,8 @@ export interface ToolInvocationUIPart {
 
 export type ResearchMode = "QNA" | "REPORT_GENERAL" | "REPORT_DEEP" | "REPORT_DEEPER";
 
+export type DiscoveryMode = "BASIC" | "DEEP" | "COMPREHENSIVE";
+
 // Toolrow MCP types for frontend
 export interface ToolrowSource {
 	id: string;

@@ -28,6 +28,12 @@ export default function DashboardLayout({
 
 	const customNavMain = [
 		{
+			title: "Discover",
+			url: `/dashboard/${search_space_id}/discover`,
+			icon: "Search",
+			items: [],
+		},
+		{
 			title: "Researcher",
 			url: `/dashboard/${search_space_id}/researcher`,
 			icon: "SquareTerminal",

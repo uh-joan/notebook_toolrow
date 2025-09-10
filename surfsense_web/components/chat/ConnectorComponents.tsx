@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { Button } from "@/components/ui/button";
-import type { Connector, ResearchMode } from "./types";
+import type { Connector, ResearchMode, DiscoveryMode } from "./types";
 
 // Helper function to get connector icon
 export const getConnectorIcon = (connectorType: string) => {
@@ -99,6 +99,32 @@ export const researcherOptions: {
 	{
 		value: "REPORT_DEEPER",
 		label: "Deeper",
+		icon: getConnectorIcon("DEEPER"),
+	},
+];
+
+export const discoveryOptions: {
+	value: DiscoveryMode;
+	label: string;
+	description: string;
+	icon: React.ReactNode;
+}[] = [
+	{
+		value: "BASIC",
+		label: "Basic Discovery",
+		description: "Quick search with 1-2 most relevant tools",
+		icon: getConnectorIcon("GENERAL"),
+	},
+	{
+		value: "DEEP",
+		label: "Deep Discovery", 
+		description: "Thorough search with multiple complementary tools",
+		icon: getConnectorIcon("DEEP"),
+	},
+	{
+		value: "COMPREHENSIVE",
+		label: "Comprehensive Discovery",
+		description: "Exhaustive search across all relevant sources",
 		icon: getConnectorIcon("DEEPER"),
 	},
 ];

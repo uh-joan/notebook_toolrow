@@ -96,18 +96,30 @@ export function AppSidebarProvider({
 			);
 
 			// Transform API response to the format expected by AppSidebar
-			const formattedChats = sortedChats.map((chat) => ({
-				name: chat.title || `Chat ${chat.id}`,
-				url: `/dashboard/${chat.search_space_id}/researcher/${chat.id}`,
-				icon: "MessageCircleMore",
-				id: chat.id,
-				search_space_id: chat.search_space_id,
+			const formattedChats = sortedChats.map((chat) => {
+				// Determine URL and icon based on chat type
+				const isDiscovery = chat.type === 'DISCOVERY';
+				const url = isDiscovery 
+					? `/dashboard/${chat.search_space_id}/discover/${chat.id}` 
+					: `/dashboard/${chat.search_space_id}/researcher/${chat.id}`;
+				const icon = isDiscovery ? "Search" : "MessageCircleMore";
+				
+				
+				return {
+					name: chat.title || `Chat ${chat.id}`,
+					url,
+					icon,
+					id: chat.id,
+					search_space_id: chat.search_space_id,
+				};
+			}).map((chat) => ({
+				...chat,
 				actions: [
 					{
 						name: "Delete",
 						icon: "Trash2",
 						onClick: () => {
-							setChatToDelete({ id: chat.id, name: chat.title || `Chat ${chat.id}` });
+							setChatToDelete({ id: chat.id, name: chat.name });
 							setShowDeleteDialog(true);
 						},
 					},

@@ -38,6 +38,7 @@ export function DashboardBreadcrumb() {
 
 				// Map section names to more readable labels
 				const sectionLabels: Record<string, string> = {
+					discover: "Discover",
 					researcher: "Researcher",
 					documents: "Documents",
 					connectors: "Connectors",

@@ -4,7 +4,7 @@ import { ChatInput } from "@llamaindex/chat-ui";
 import { Brain, Check, FolderOpen, Zap } from "lucide-react";
 import { useParams } from "next/navigation";
 import React, { Suspense, useCallback, useState } from "react";
-import type { ResearchMode } from "@/components/chat";
+import type { ResearchMode, DiscoveryMode } from "@/components/chat";
 import {
 	ConnectorButton as ConnectorButtonComponent,
 	getConnectorIcon,
@@ -331,6 +331,61 @@ const ResearchModeSelector = React.memo(
 );
 
 ResearchModeSelector.displayName = "ResearchModeSelector";
+
+const DiscoveryModeSelector = React.memo(
+	({
+		discoveryMode,
+		onDiscoveryModeChange,
+	}: {
+		discoveryMode?: DiscoveryMode;
+		onDiscoveryModeChange?: (mode: DiscoveryMode) => void;
+	}) => {
+		const handleValueChange = React.useCallback(
+			(value: string) => {
+				onDiscoveryModeChange?.(value as DiscoveryMode);
+			},
+			[onDiscoveryModeChange]
+		);
+
+		// Memoize mode options to prevent recreation
+		const modeOptions = React.useMemo(
+			() => [
+				{ value: "BASIC", label: "Basic Discovery", shortLabel: "Basic" },
+				{ value: "DEEP", label: "Deep Discovery", shortLabel: "Deep" },
+				{ value: "COMPREHENSIVE", label: "Comprehensive Discovery", shortLabel: "Comprehensive" },
+			],
+			[]
+		);
+
+		return (
+			<div className="flex items-center gap-1 sm:gap-2">
+				<span className="text-xs text-muted-foreground hidden sm:block">Mode:</span>
+				<Select value={discoveryMode} onValueChange={handleValueChange}>
+					<SelectTrigger className="w-auto min-w-[80px] sm:min-w-[120px] h-8 text-xs border-border bg-background hover:bg-muted/50 transition-colors duration-200 focus:ring-2 focus:ring-primary/20">
+						<SelectValue placeholder="Mode" className="text-xs" />
+					</SelectTrigger>
+					<SelectContent align="end" className="min-w-[140px]">
+						<div className="px-2 py-1.5 text-xs font-medium text-muted-foreground border-b bg-muted/30">
+							Discovery Mode
+						</div>
+						{modeOptions.map((option) => (
+							<SelectItem
+								key={option.value}
+								value={option.value}
+								className="px-3 py-2 cursor-pointer hover:bg-accent/50 focus:bg-accent"
+							>
+								<span className="hidden sm:inline">{option.label}</span>
+								<span className="sm:hidden">{option.shortLabel}</span>
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			</div>
+		);
+	}
+);
+
+DiscoveryModeSelector.displayName = "DiscoveryModeSelector";
 
 const LLMSelector = React.memo(() => {
 	const { llmConfigs, loading: llmLoading, error } = useLLMConfigs();
