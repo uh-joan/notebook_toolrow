@@ -4,7 +4,7 @@
       "transport": "stdio",
       "command": "node",
       "args": [
-        "/Users/joan.saez-pons/code/toolrow/toolrow_mcp_server.js"
+        "toolrow_servers/toolrow_mcp_server.js"
       ],
       "env": {}
     }

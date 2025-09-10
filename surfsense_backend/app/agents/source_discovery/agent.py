@@ -141,7 +141,7 @@ class SourceDiscoveryAgent:
             }
             
             # Call the Toolrow MCP server
-            cmd = ["node", "/Users/joan.saez-pons/code/toolrow/toolrow_direct.js"]
+            cmd = ["node", "toolrow_servers/toolrow_direct.js"]
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=subprocess.PIPE,
@@ -553,7 +553,7 @@ Parameters JSON:"""
             env["TOOLROW_API_TOKEN"] = self.toolrow_token or ""
             
             # Call the Toolrow MCP server directly
-            cmd = ["node", "/Users/joan.saez-pons/code/toolrow/toolrow_direct.js"]
+            cmd = ["node", "toolrow_servers/toolrow_direct.js"]
             
             process = await asyncio.create_subprocess_exec(
                 *cmd,

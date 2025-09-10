@@ -1,0 +1,21 @@
+{
+  "name": "surfsense-toolrow-servers",
+  "version": "1.0.0",
+  "description": "Local Toolrow MCP servers for SurfSense discovery agent",
+  "main": "toolrow_mcp_server.js",
+  "scripts": {
+    "start": "node toolrow_mcp_server.js",
+    "direct": "node toolrow_direct.js"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "keywords": [
+    "mcp",
+    "toolrow",
+    "surfsense",
+    "discovery"
+  ],
+  "author": "SurfSense Team",
+  "license": "MIT"
+}
