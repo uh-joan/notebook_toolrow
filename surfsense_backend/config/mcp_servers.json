@@ -2,8 +2,10 @@
   "mcpServers": {
     "toolrow-gateway": {
       "transport": "stdio",
-      "command": "npx",
-      "args": ["-y", "@uh-joan/toolrow-mcp-server"],
+      "command": "node",
+      "args": [
+        "/Users/joan.saez-pons/code/toolrow/toolrow_mcp_server.js"
+      ],
       "env": {}
     }
   }
