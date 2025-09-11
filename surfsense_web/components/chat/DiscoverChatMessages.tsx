@@ -367,15 +367,18 @@ export default function DiscoverChatMessages({
 		<div className="flex-1 overflow-y-auto p-4 space-y-4">
 			{messages.length === 0 ? (
 				<div className="text-center text-muted-foreground py-8">
-					<div className="space-y-2">
-						<h3 className="text-lg font-medium">Start discovering sources</h3>
-						<p>Ask me to find data from clinical trials, FDA, PubMed, medical codes, and more.</p>
+					<div className="space-y-4">
+						<h2 className="text-2xl font-bold text-foreground">SourceBook Discover</h2>
+						<p className="text-base max-w-2xl mx-auto">
+							Fetch live sources via Toolrow MCP (FDA, ct.gov, PubMed, WHO, SEC, codes)—auto-cited with one-click Add to Sources.
+						</p>
 						<div className="text-sm space-y-1 mt-4">
-							<p><strong>Try asking:</strong></p>
-							<p>• "Find ICD-10 codes for obesity"</p>
-							<p>• "Get FDA approved drugs for diabetes"</p>
-							<p>• "Search clinical trials for cancer treatment"</p>
-							<p>• "Find research papers about AI in healthcare"</p>
+							<p className="font-medium text-foreground">Try asking::</p>
+								<p>"ICD-10 & MeSH for obesity"</p>
+								<p>"US FDA drugs for T2D"</p>
+								<p>"Phase 2/3 trials recruiting in EU"</p>
+								<p>"Latest PubMed reviews on GLP-1"</p>
+							
 						</div>
 					</div>
 				</div>

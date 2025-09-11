@@ -133,19 +133,21 @@ export function AnimatedEmptyState() {
 
 	return (
 		<div ref={ref} className="flex-1 flex items-center justify-center w-full min-h-[400px]">
-			<div className="max-w-4xl mx-auto px-4 py-10 text-center">
-				<RoughNotationGroup show={shouldShowHighlight}>
-					<h1 className={headingClassName}>
-						<RoughNotation {...ANIMATION_CONFIG.HIGHLIGHT}>
-							<span>SurfSense</span>
-						</RoughNotation>
-					</h1>
-
-					<p className={paragraphClassName}>
-						<RoughNotation {...ANIMATION_CONFIG.UNDERLINE}>Let's Start Surfing</RoughNotation>{" "}
-						through your knowledge base.
+			<div className="text-center text-muted-foreground py-8">
+				<div className="space-y-4">
+					<h2 className="text-2xl font-bold text-foreground">SourceBook Researcher</h2>
+					<p className="text-base max-w-2xl mx-auto">
+						Explore your knowledge base. Ask questions grounded in your selected documents. Answers come with citations.
+						<br />
+						Enable Toolrow MCP to pull live facts when your docs don't cover it.
 					</p>
-				</RoughNotationGroup>
+					<div className="text-sm space-y-1 mt-4">
+						<p className="font-medium text-foreground">Try asking:</p>
+						<p>"What year was semaglutide approved in the US?"</p>
+						<p>"Summarize key label warnings in these PDFs"</p>
+						<p>"Compare endpoints across these trials"</p>
+					</div>
+				</div>
 			</div>
 		</div>
 	);
