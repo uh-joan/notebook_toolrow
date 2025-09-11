@@ -97,7 +97,7 @@ const DesktopNav = ({ navItems, visible }: NavbarProps) => {
 		>
 			<div className="flex flex-row items-center gap-2">
 				<Logo className="h-8 w-8 rounded-md" />
-				<span className="dark:text-white/90 text-gray-800 text-lg font-bold">SurfSense</span>
+				<span className="dark:text-white/90 text-gray-800 text-lg font-bold">SourceBook</span>
 			</div>
 			<div className="flex items-center gap-4">
 				<motion.div

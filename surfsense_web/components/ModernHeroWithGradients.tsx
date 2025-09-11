@@ -19,13 +19,13 @@ export function ModernHeroWithGradients() {
 					<div className="relative z-20 flex flex-col items-center justify-center overflow-hidden rounded-3xl p-4 md:p-12 lg:p-16">
 						<div className="flex justify-center w-full mb-4">
 							<Link
-								href="https://github.com/MODSetter/SurfSense"
+								href="https://github.com/MODSetter/SourceBook"
 								target="_blank"
 								rel="noopener noreferrer"
 							>
 								<img
 									src="https://trendshift.io/api/badge/repositories/13606"
-									alt="MODSetter%2FSurfSense | Trendshift"
+									alt="MODSetter%2FSourceBook | Trendshift"
 									style={{ width: "250px", height: "55px" }}
 									width={250}
 									height={55}
@@ -45,7 +45,7 @@ export function ModernHeroWithGradients() {
 								<Logo className="rounded-md" />
 							</div>
 							<h1 className="bg-gradient-to-b from-gray-800 to-gray-600 bg-clip-text py-4 text-center text-3xl text-transparent dark:from-white dark:to-purple-300 md:text-5xl lg:text-8xl">
-								SurfSense
+								SourceBook
 							</h1>
 						</div>
 						<p className="mx-auto max-w-3xl py-6 text-center text-base text-gray-600 dark:text-neutral-300 md:text-lg lg:text-xl">
@@ -62,7 +62,7 @@ export function ModernHeroWithGradients() {
 								<span>Discord</span>
 							</Link>
 							<Link
-								href="https://github.com/MODSetter/SurfSense"
+								href="https://github.com/MODSetter/SourceBook"
 								className="w-48 gap-1 rounded-full border border-transparent bg-gray-800 px-5 py-3 text-center text-sm font-medium text-white shadow-sm hover:bg-gray-700 dark:bg-gradient-to-r dark:from-purple-700 dark:to-indigo-800 dark:text-white dark:hover:from-purple-600 dark:hover:to-indigo-700 flex items-center justify-center"
 							>
 								<IconBrandGithub className="h-5 w-5 mr-2" />

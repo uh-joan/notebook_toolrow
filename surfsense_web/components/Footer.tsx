@@ -27,7 +27,7 @@ export function Footer() {
 				<div className="flex flex-col items-center justify-center w-full relative">
 					<div className="mr-0 md:mr-4 md:flex mb-4">
 						<div className="flex items-center">
-							<span className="font-medium text-black dark:text-white ml-2">SurfSense</span>
+							<span className="font-medium text-black dark:text-white ml-2">SourceBook</span>
 						</div>
 					</div>
 
@@ -45,7 +45,7 @@ export function Footer() {
 				</div>
 				<div className="flex sm:flex-row flex-col justify-between mt-8 items-center w-full">
 					<p className="text-neutral-500 dark:text-neutral-400 mb-8 sm:mb-0">
-						&copy; SurfSense 2025
+						&copy; SourceBook 2025
 					</p>
 					<div className="flex gap-4">
 						<Link href="https://x.com/mod_setter">
