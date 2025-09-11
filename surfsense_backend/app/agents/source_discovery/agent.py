@@ -224,7 +224,7 @@ class SourceDiscoveryAgent:
                         result = await self.agent.run(prompt)
                     else:
                         # Use direct tool execution (but don't mention it to user)
-                        result = await self._execute_with_direct_tools(prompt, tools, user_input)
+                        result = await self._execute_with_direct_tools(prompt, tools, user_input, chat_history)
                 else:
                     yield "❌ Research tools temporarily unavailable\n"
                     result = "I apologize, but the research tools are temporarily unavailable. Please try again in a few moments."
@@ -292,7 +292,7 @@ Use the most relevant tool to provide authoritative results for: "{user_input}"
         
         return MinimalAgent()
 
-    async def _execute_with_direct_tools(self, prompt: str, available_tools: List[Dict[str, Any]], user_input: str) -> str:
+    async def _execute_with_direct_tools(self, prompt: str, available_tools: List[Dict[str, Any]], user_input: str, chat_history: Optional[List] = None) -> str:
         """Execute discovery using direct tool access when MCPAgent fails."""
         try:
             logger.info(f"🔧 Direct tool execution with {len(available_tools)} tools")
@@ -301,10 +301,10 @@ Use the most relevant tool to provide authoritative results for: "{user_input}"
             tool_names = [tool['name'] for tool in available_tools]
             
             # Use LLM to intelligently select the most appropriate tool
-            selected_tool = await self._select_tool_with_llm(user_input, available_tools)
+            selected_tool = await self._select_tool_with_llm(user_input, available_tools, chat_history)
             
             if selected_tool:
-                return await self._execute_selected_tool(selected_tool, user_input)
+                return await self._execute_selected_tool(selected_tool, user_input, chat_history)
             else:
                 # If no specific tool selected, provide general guidance
                 return await self._provide_general_guidance(user_input, available_tools)
@@ -313,7 +313,7 @@ Use the most relevant tool to provide authoritative results for: "{user_input}"
             logger.error(f"❌ Direct tool execution failed: {e}")
             return f"Unable to execute direct tool access: {str(e)}"
 
-    async def _select_tool_with_llm(self, user_input: str, available_tools: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    async def _select_tool_with_llm(self, user_input: str, available_tools: List[Dict[str, Any]], chat_history: Optional[List] = None) -> Optional[Dict[str, Any]]:
         """Use LLM to intelligently select the most appropriate tool for the query."""
         try:
             # Create tool descriptions for LLM
@@ -323,18 +323,35 @@ Use the most relevant tool to provide authoritative results for: "{user_input}"
             
             tools_text = "\n".join(tool_descriptions)
             
+            # Add conversation history context for tool selection
+            history_context = ""
+            if chat_history:
+                # Check if previous query used a specific tool
+                previous_tools_used = []
+                for msg in chat_history[-3:]:
+                    content = msg.get('content', '')
+                    if 'Tool Used:' in content:
+                        tool_match = content.split('Tool Used:')[1].split('\n')[0].strip()
+                        if tool_match:
+                            previous_tools_used.append(tool_match)
+                
+                if previous_tools_used:
+                    history_context = f"\nConversation Context:\nPrevious tool used: {previous_tools_used[-1]}\n"
+
             # Create a prompt for tool selection
             selection_prompt = f"""Given the user query and available tools, select the most appropriate tool to use.
 
 User Query: "{user_input}"
-
+{history_context}
 Available Tools:
 {tools_text}
 
 Instructions:
 - Respond with ONLY the tool name that best matches the query
 - If no tool is clearly appropriate, respond with "NONE"
+- CRITICAL: For follow-up queries like "only for X", "filter for Y", "narrow down to Z", use the SAME tool as before
 - Consider the query intent and tool capabilities
+- For refinement queries, maintain the same data source/tool
 
 Tool Selection:"""
 
@@ -357,14 +374,14 @@ Tool Selection:"""
             logger.error(f"❌ Tool selection with LLM failed: {e}")
             return None
 
-    async def _execute_selected_tool(self, tool: Dict[str, Any], user_input: str) -> str:
+    async def _execute_selected_tool(self, tool: Dict[str, Any], user_input: str, chat_history: Optional[List] = None) -> str:
         """Execute the selected tool with appropriate parameters."""
         try:
             tool_name = tool['name']
             logger.info(f"🔧 Executing selected tool: {tool_name}")
             
             # Extract parameters based on tool type and query
-            params = await self._extract_tool_parameters(tool, user_input)
+            params = await self._extract_tool_parameters(tool, user_input, chat_history)
             
             # Call the tool
             result = await self._call_tool_subprocess(tool_name, params)
@@ -411,7 +428,7 @@ Tool call attempted but no results returned. Error: {result.get('error', 'Unknow
             logger.error(f"❌ Tool execution failed: {e}")
             return f"Error executing tool {tool.get('name', 'unknown')}: {e}"
 
-    async def _extract_tool_parameters(self, tool: Dict[str, Any], user_input: str) -> dict:
+    async def _extract_tool_parameters(self, tool: Dict[str, Any], user_input: str, chat_history: Optional[List] = None) -> dict:
         """Use LLM to extract appropriate parameters for the selected tool."""
         try:
             tool_name = tool['name']
@@ -434,12 +451,32 @@ Tool call attempted but no results returned. Error: {result.get('error', 'Unknow
                     param_type = param_info.get('type', 'unknown')
                     schema_info += f"- {param_name} ({param_type}): {description}\n"
             
+            # Add conversation history context for follow-up questions
+            history_context = ""
+            if chat_history:
+                logger.info(f"📝 Chat history available: {len(chat_history)} messages")
+                history_context = "\nConversation History:\n" + "\n".join([
+                    f"{msg.get('role', 'user')}: {msg.get('content', '')}"
+                    for msg in chat_history[-3:]  # Last 3 messages for context
+                ]) + "\n"
+                
+                # Add previous parameters if available for the same tool
+                if hasattr(self, '_last_tool_params') and tool_name in self._last_tool_params:
+                    prev_params = self._last_tool_params[tool_name]
+                    history_context += f"\nPrevious Parameters for {tool_name}:\n{prev_params}\n"
+                    logger.info(f"📝 Including previous parameters: {prev_params}")
+                
+                logger.info(f"📝 History context for parameter extraction: {history_context[:200]}...")
+            else:
+                logger.info("📝 No chat history available for parameter extraction")
+
             # Create a prompt to extract parameters dynamically
             param_prompt = f"""Extract the appropriate parameters for calling this tool based on the user query and schema.
 
 Tool: {tool_name}
 Description: {tool_description}
 {schema_info}
+{history_context}
 User Query: "{user_input}"
 
 Instructions:
@@ -447,6 +484,16 @@ Instructions:
 - Match parameter types exactly as specified in the schema
 - For enum fields, use the exact values listed in the schema
 - Extract relevant information from the user query that maps to the schema parameters
+- CRITICAL: If previous parameters are provided, START with those and MODIFY them based on the new query
+- For follow-up questions like "filter for X", "only Y", "narrow down to Z":
+  * START with the previous parameters as your base
+  * MODIFY only the relevant parameters based on the new criteria
+  * KEEP all other parameters unchanged unless explicitly overridden
+- Examples of parameter evolution:
+  * Previous: {"method": "icd-10-cm", "terms": "diabetes"} 
+  * Query: "only type 2" → {"method": "icd-10-cm", "terms": "type 2 diabetes"}
+  * Previous: {"condition": "obesity", "location": "California"}
+  * Query: "filter for GLP-1" → {"condition": "obesity", "location": "California", "intervention": "GLP-1"}
 - If a parameter has a description, use that to understand what values to extract
 - Return ONLY a valid JSON object with the extracted parameters
 - Use proper data types (string, number, boolean, array) as specified in the schema
@@ -469,7 +516,15 @@ Parameters JSON:"""
                 # Fallback: create basic parameters
                 params = self._create_basic_parameters(tool_name, user_input)
             
-            logger.info(f"📋 Extracted parameters for {tool_name}: {params}")
+            logger.info(f"📋 Final extracted parameters for {tool_name}: {params}")
+            logger.info(f"📝 Parameter extraction used history: {'YES' if chat_history else 'NO'}")
+            
+            # Store parameters in conversation context for future follow-ups
+            if hasattr(self, '_last_tool_params'):
+                self._last_tool_params[tool_name] = params
+            else:
+                self._last_tool_params = {tool_name: params}
+            
             return params
             
         except Exception as e:
