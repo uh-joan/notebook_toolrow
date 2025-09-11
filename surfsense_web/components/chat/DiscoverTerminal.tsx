@@ -20,11 +20,42 @@ interface Message {
 
 export default function DiscoverTerminal({ message, open = false }: { message: Message; open?: boolean }) {
 	const [isCollapsed, setIsCollapsed] = useState(!open);
+	const [isAutoCollapsing, setIsAutoCollapsing] = useState(false);
 	const bottomRef = useRef<HTMLDivElement>(null);
 
 	if (!message || message.role !== "assistant") {
 		return null;
 	}
+
+	// Check for terminal auto-collapse annotation
+	const messageForCollapseCheck = {
+		...message,
+		content: typeof message.content === 'string' 
+			? message.content 
+			: Array.isArray(message.content) 
+				? message.content.filter(part => part.type === 'text').map(part => part.text).join('')
+				: ''
+	};
+	const collapseAnnotation = getAnnotationData(messageForCollapseCheck, "TERMINAL_COLLAPSE");
+	
+	// Auto-collapse terminal when completion annotation is received
+	useEffect(() => {
+		if (collapseAnnotation && collapseAnnotation.length > 0) {
+			// Check if should auto-collapse
+			const shouldAutoCollapse = collapseAnnotation.some((annotation: any) => 
+				annotation?.auto_collapse === true || annotation?.data?.auto_collapse === true
+			);
+			
+			if (shouldAutoCollapse) {
+				// Add a small delay for better UX (let user see the completion)
+				setIsAutoCollapsing(true);
+				setTimeout(() => {
+					setIsCollapsed(true);
+					setIsAutoCollapsing(false);
+				}, 1500); // 1.5 second delay
+			}
+		}
+	}, [collapseAnnotation]);
 
 	// Extract terminal events from live annotations (like researcher agent) and fallback to final data
 	let events: TerminalEvent[] = [];
@@ -151,6 +182,11 @@ export default function DiscoverTerminal({ message, open = false }: { message: M
 				</div>
 				<div className="text-gray-400 text-xs ml-2 flex-1">
 					Discovery Process Terminal ({events.length} events)
+					{isAutoCollapsing && (
+						<span className="ml-2 text-yellow-400 animate-pulse">
+							Auto-collapsing...
+						</span>
+					)}
 				</div>
 				<div className="text-gray-400">
 					{isCollapsed ? (
