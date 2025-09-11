@@ -132,7 +132,7 @@ export function AnimatedEmptyState() {
 	}, [layoutStable, isInView]);
 
 	return (
-		<div ref={ref} className="flex-1 flex items-center justify-center w-full min-h-[400px]">
+		<div ref={ref} className="flex-1 flex items-center justify-center w-full">
 			<div className="text-center text-muted-foreground py-8">
 				<div className="space-y-4">
 					<h2 className="text-2xl font-bold text-foreground">SourceBook Researcher</h2>
