@@ -2,7 +2,7 @@
 	"name": "surfsense_browser_extension",
 	"displayName": "Surfsense Browser Extension",
 	"version": "0.0.7",
-	"description": "Extension to collect Browsing History for SurfSense.",
+	"description": "Extension to collect Browsing History for SourceBook.",
 	"author": "https://github.com/MODSetter",
 	"scripts": {
 		"dev": "plasmo dev",
@@ -49,8 +49,8 @@
 		"host_permissions": [
 			"<all_urls>"
 		],
-		"name": "SurfSense",
-		"description": "Extension to collect Browsing History for SurfSense.",
+		"name": "SourceBook",
+		"description": "Extension to collect Browsing History for SourceBook.",
 		"version": "0.0.3"
 	},
 	"permissions": [

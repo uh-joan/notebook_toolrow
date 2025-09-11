@@ -1,7 +1,7 @@
 [project]
-name = "surf-new-backend"
+name = "sourcebook-backend"
 version = "0.0.7"
-description = "SurfSense Backend"
+description = "SourceBook Backend"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

@@ -1,8 +1,8 @@
 {
-	"name": "surfsense_web",
+	"name": "sourcebook_web",
 	"version": "0.0.7",
 	"private": true,
-	"description": "SurfSense Frontend",
+	"description": "SourceBook Frontend",
 	"scripts": {
 		"dev": "next dev --turbopack",
 		"dev:turbo": "next dev --turbopack",

@@ -1,10 +1,10 @@
-# SurfSense Deployment Guide
+# SourceBook Deployment Guide
 
-This guide explains the different deployment options available for SurfSense using Docker Compose.
+This guide explains the different deployment options available for SourceBook using Docker Compose.
 
 ## Deployment Options
 
-SurfSense uses a flexible Docker Compose configuration that allows you to easily switch between deployment modes without manually editing files. Our approach uses Docker's built-in override functionality with two configuration files:
+SourceBook uses a flexible Docker Compose configuration that allows you to easily switch between deployment modes without manually editing files. Our approach uses Docker's built-in override functionality with two configuration files:
 
 1. **docker-compose.yml**: Contains essential core services (database and pgAdmin)
 2. **docker-compose.override.yml**: Contains application services (frontend and backend)
@@ -79,8 +79,8 @@ docker compose up -d
 
 ```bash
 # Clone the repository
-git clone https://github.com/MODSetter/SurfSense.git
-cd SurfSense
+git clone https://github.com/MODSetter/SourceBook.git
+cd SourceBook
 
 # Copy example env files
 cp .env.example .env

@@ -1,6 +1,6 @@
-# Docker Setup for SurfSense
+# Docker Setup for SourceBook
 
-This document explains how to run the SurfSense project using Docker Compose.
+This document explains how to run the SourceBook project using Docker Compose.
 
 ## Prerequisites
 
@@ -9,7 +9,7 @@ This document explains how to run the SurfSense project using Docker Compose.
 
 ## Environment Variables Configuration
 
-SurfSense Docker setup supports configuration through environment variables. You can set these variables in two ways:
+SourceBook Docker setup supports configuration through environment variables. You can set these variables in two ways:
 
 1. Create a `.env` file in the project root directory (copy from `.env.example`)
 2. Set environment variables directly in your shell before running Docker Compose
@@ -38,7 +38,7 @@ PGADMIN_DEFAULT_PASSWORD=surfsense
 
 ## Deployment Options
 
-SurfSense uses a flexible Docker Compose setup that allows you to choose between different deployment modes:
+SourceBook uses a flexible Docker Compose setup that allows you to choose between different deployment modes:
 
 ### Option 1: Full-Stack Deployment (Development Mode)
 Includes frontend, backend, database, and pgAdmin. This is the default when running `docker compose up`.
@@ -161,7 +161,7 @@ pgAdmin is a web-based administration tool for PostgreSQL. It is included in the
 
 1. Log in to pgAdmin using the credentials above
 2. Right-click on "Servers" in the left sidebar and select "Create" > "Server"
-3. In the "General" tab, give your connection a name (e.g., "SurfSense DB")
+3. In the "General" tab, give your connection a name (e.g., "SourceBook DB")
 4. In the "Connection" tab, enter the following:
    - Host: db
    - Port: 5432

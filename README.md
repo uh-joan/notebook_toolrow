@@ -9,11 +9,11 @@
 </div>
 
 
-# SurfSense
-While tools like NotebookLM and Perplexity are impressive and highly effective for conducting research on any topic/query, SurfSense elevates this capability by integrating with your personal knowledge base. It is a highly customizable AI research agent, connected to external sources such as Search Engines (Tavily, LinkUp), Slack, Linear, Jira, ClickUp, Confluence, Gmail, Notion, YouTube, GitHub, Discord, Airtable, Google Calendar and more to come.
+# SourceBook
+While tools like NotebookLM and Perplexity are impressive and highly effective for conducting research on any topic/query, SourceBook elevates this capability by integrating with your personal knowledge base. It is a highly customizable AI research agent, connected to external sources such as Search Engines (Tavily, LinkUp), Slack, Linear, Jira, ClickUp, Confluence, Gmail, Notion, YouTube, GitHub, Discord, Airtable, Google Calendar and more to come.
 
 <div align="center">
-<a href="https://trendshift.io/repositories/13606" target="_blank"><img src="https://trendshift.io/api/badge/repositories/13606" alt="MODSetter%2FSurfSense | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/13606" target="_blank"><img src="https://trendshift.io/api/badge/repositories/13606" alt="MODSetter%2FSourceBook | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </div>
 
 
@@ -115,7 +115,7 @@ Open source and easy to deploy locally.
 **Unstructured**: `.eml`, `.msg`, `.p7s`
 
 ### 🔖 Cross Browser Extension
-- The SurfSense extension can be used to save any webpage you like.
+- The SourceBook extension can be used to save any webpage you like.
 - Its main usecase is to save any webpages protected beyond authentication.
 
 
@@ -123,24 +123,24 @@ Open source and easy to deploy locally.
 ## FEATURE REQUESTS AND FUTURE
 
 
-**SurfSense is actively being developed.** While it's not yet production-ready, you can help us speed up the process.
+**SourceBook is actively being developed.** While it's not yet production-ready, you can help us speed up the process.
 
-Join the [SurfSense Discord](https://discord.gg/ejRNvftDp9) and help shape the future of SurfSense!
+Join the [SourceBook Discord](https://discord.gg/ejRNvftDp9) and help shape the future of SourceBook!
 
 ## 🚀 Roadmap
 
 Stay up to date with our development progress and upcoming features!  
 Check out our public roadmap and contribute your ideas or feedback:
 
-**View the Roadmap:** [SurfSense Roadmap on GitHub Projects](https://github.com/users/MODSetter/projects/2)
+**View the Roadmap:** [SourceBook Roadmap on GitHub Projects](https://github.com/users/MODSetter/projects/2)
 
 ## How to get started?
 
 ### Installation Options
 
-SurfSense provides two installation methods:
+SourceBook provides two installation methods:
 
-1. **[Docker Installation](https://www.surfsense.net/docs/docker-installation)** - The easiest way to get SurfSense up and running with all dependencies containerized.
+1. **[Docker Installation](https://www.surfsense.net/docs/docker-installation)** - The easiest way to get SourceBook up and running with all dependencies containerized.
    - Includes pgAdmin for database management through a web UI
    - Supports environment variable customization via `.env` file
    - Flexible deployment options (full stack or core services only)
@@ -282,11 +282,11 @@ For detailed contribution guidelines, please see our [CONTRIBUTING.md](CONTRIBUT
 
 ## Star History
 
-<a href="https://www.star-history.com/#MODSetter/SurfSense&Date">
+<a href="https://www.star-history.com/#MODSetter/SourceBook&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=MODSetter/SurfSense&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=MODSetter/SurfSense&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=MODSetter/SurfSense&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=MODSetter/SourceBook&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=MODSetter/SourceBook&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=MODSetter/SourceBook&type=Date" />
  </picture>
 </a>
 
