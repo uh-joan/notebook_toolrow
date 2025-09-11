@@ -25,6 +25,7 @@ class SourceDiscoveryAgent:
         self.agent: Optional[MCPAgent] = None
         self.llm = None
         self.toolrow_token: Optional[str] = None
+        self._follow_up_questions = []
     
     async def _wait_for_tools_available(self, max_retries: int = 3, delay: float = 1.0) -> bool:
         """Wait for tools to be available in MCP sessions."""
@@ -248,13 +249,7 @@ class SourceDiscoveryAgent:
                 yield result
             else:
                 yield str(result)
-            
-            yield "\n" + "═" * 50 + "\n"
-            yield "✅ Research completed successfully!\n"
-            yield f"🎯 Search query: '{user_input}'\n"
-            yield f"📊 Databases searched: {len(tools)}\n"
-            yield "💡 Results are ready for your review\n"
-            
+                
         except Exception as e:
             yield f"❌ Research error: Unable to complete your search at this time\n"
             yield "Please try again in a few moments or contact support if the issue persists.\n"
@@ -345,10 +340,16 @@ Use the most relevant tool to provide authoritative results for: "{user_input}"
             if selected_tool:
                 yield f"✅ Selected: **{selected_tool['name']}** - {selected_tool.get('description', 'Specialized research tool')}\n"
                 
-                # Step 2: Parameter Extraction
+                # Step 2: Search Strategy Analysis
+                yield "🧠 Analyzing search strategy (precision vs. recall)...\n"
+                
+                search_strategy = await self._analyze_search_intent(user_input, selected_tool, chat_history)
+                yield f"📊 Search approach: **{search_strategy['approach']}** - {search_strategy['reasoning']}\n"
+                
+                # Step 3: Parameter Extraction
                 yield "⚙️ Extracting search parameters from your query...\n"
                 
-                params = await self._extract_tool_parameters(selected_tool, user_input, chat_history)
+                params = await self._extract_tool_parameters(selected_tool, user_input, chat_history, search_strategy)
                 
                 # Show the parameters in a user-friendly way
                 yield f"📋 Search parameters configured:\n"
@@ -368,27 +369,86 @@ Use the most relevant tool to provide authoritative results for: "{user_input}"
                 yield "📋 Processing search results...\n"
                 yield "📄 Research Results:\n\n"
                 
-                # Format and stream the result
+                # Format and stream the result with strategy analysis
                 if result:
-                    formatted_result = await self._format_tool_response(user_input, selected_tool['name'], result, chat_history)
+                    formatted_result = await self._format_tool_response(user_input, selected_tool['name'], result, chat_history, search_strategy)
                     yield formatted_result
+                    
+                    # Generate contextual follow-up questions
+                    follow_up_questions = await self._generate_follow_up_questions(user_input, result, selected_tool, chat_history)
+                    if follow_up_questions:
+                        # Store questions for the route to handle with StreamingService
+                        self._follow_up_questions = follow_up_questions
+                    
+                    # Analyze results and suggest alternatives if needed (only if poor results)
+                    result_analysis = await self._analyze_search_results(result, search_strategy, user_input, selected_tool)
+                    if result_analysis.get('suggest_alternatives'):
+                        yield f"💡 **Search Strategy Suggestions:**\n{result_analysis['suggestions']}\n"
                 else:
-                    yield "No results found for your query. Try adjusting your search terms.\n"
+                    yield "No results found for your query.\n"
+                    # Provide alternative strategy suggestions for zero results
+                    alternative_suggestions = await self._suggest_alternative_strategies(search_strategy, user_input, selected_tool)
+                    yield f"💡 **Alternative Search Strategies:**\n{alternative_suggestions}\n"
                 
             else:
                 yield "❌ Unable to select appropriate research tool\n"
                 general_result = await self._provide_general_guidance(user_input, available_tools)
                 yield general_result
-                
-            yield "\n" + "═" * 50 + "\n"
-            yield "✅ Research completed successfully!\n"
-            yield f"🎯 Search query: '{user_input}'\n"
-            yield f"📊 Databases searched: {len(available_tools)}\n"
-            yield "💡 Results are ready for your review\n"
             
         except Exception as e:
             logger.error(f"❌ Streaming tool execution failed: {e}")
             yield f"❌ Research error: {str(e)}\n"
+
+    async def _analyze_search_intent(self, user_input: str, selected_tool: Dict[str, Any], chat_history: Optional[List] = None) -> Dict[str, str]:
+        """Analyze user intent to determine optimal search strategy (precision vs recall)."""
+        try:
+            # Analyze the query characteristics
+            intent_prompt = f"""Analyze this search query to determine the optimal search strategy.
+
+User Query: "{user_input}"
+Tool: {selected_tool['name']}
+Tool Description: {selected_tool.get('description', '')}
+
+INTENT ANALYSIS FRAMEWORK:
+1. **High Precision** (exact/specific terms):
+   - User uses technical terminology or specific identifiers
+   - Precise mechanisms, codes, or exact names mentioned
+   - Research-focused language ("specifically about", "exactly matching")
+   - Narrow, well-defined concepts with little ambiguity
+
+2. **High Recall** (broad/exploratory):
+   - General terminology or category-level requests
+   - Exploratory language ("find", "what's available", "search for")
+   - Broad concepts that could have many related variations
+   - Discovery-oriented queries seeking comprehensive coverage
+
+3. **Balanced** (moderate expansion):
+   - Mix of specific and general terms
+   - Follow-up questions that refine previous searches
+   - Reasonable specificity but open to related concepts
+
+Respond with EXACTLY this JSON format:
+{{"approach": "High Precision|High Recall|Balanced", "reasoning": "Brief explanation of why this approach is optimal for this query and database"}}"""
+
+            response = await self.llm.ainvoke(intent_prompt)
+            
+            try:
+                import json
+                result = json.loads(response.content.strip())
+                return result
+            except json.JSONDecodeError:
+                # Fallback if JSON parsing fails
+                return {
+                    "approach": "Balanced",
+                    "reasoning": "Using balanced approach as fallback - will try exact terms first, then expand if needed"
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Search intent analysis failed: {e}")
+            return {
+                "approach": "Balanced", 
+                "reasoning": "Using balanced approach due to analysis error"
+            }
 
     async def _select_tool_with_llm(self, user_input: str, available_tools: List[Dict[str, Any]], chat_history: Optional[List] = None) -> Optional[Dict[str, Any]]:
         """Use LLM to intelligently select the most appropriate tool for the query."""
@@ -451,7 +511,6 @@ Tool Selection:"""
                 logger.warning(f"⚠️ LLM selected unknown tool: {selected_tool_name}")
             
             return None
-            
         except Exception as e:
             logger.error(f"❌ Tool selection with LLM failed: {e}")
             return None
@@ -508,7 +567,7 @@ Tool call attempted but no results returned. Error: {result.get('error', 'Unknow
             logger.error(f"❌ Tool execution failed: {e}")
             return f"Error executing tool {tool.get('name', 'unknown')}: {e}"
 
-    async def _extract_tool_parameters(self, tool: Dict[str, Any], user_input: str, chat_history: Optional[List] = None) -> dict:
+    async def _extract_tool_parameters(self, tool: Dict[str, Any], user_input: str, chat_history: Optional[List] = None, search_strategy: Optional[Dict[str, str]] = None) -> dict:
         """Use LLM to extract appropriate parameters for the selected tool."""
         try:
             tool_name = tool['name']
@@ -558,12 +617,26 @@ Tool call attempted but no results returned. Error: {result.get('error', 'Unknow
             else:
                 logger.info("📝 No chat history available for parameter extraction")
 
+            # Add search strategy context
+            strategy_context = ""
+            if search_strategy:
+                strategy_context = f"""
+Search Strategy: {search_strategy['approach']}
+Strategy Reasoning: {search_strategy['reasoning']}
+
+STRATEGY APPLICATION:
+- High Precision: Use exact terms from user query, preserve technical specificity
+- High Recall: Consider broader terms, synonyms, and category expansions
+- Balanced: Start with user terms, be ready to adjust based on database response
+"""
+
             # Create a prompt to extract parameters dynamically
             param_prompt = f"""Extract the appropriate parameters for calling this tool based on the user query and schema.
 
 Tool: {tool_name}
 Description: {tool_description}
 {schema_info}
+{strategy_context}
 {history_context}
 User Query: "{user_input}"
 
@@ -733,13 +806,13 @@ Parameters JSON:"""
             else:
                 logger.error(f"Tool subprocess failed: {stderr.decode()}")
                 return {"success": False, "error": f"Subprocess failed: {stderr.decode()}"}
-                
+                    
         except Exception as e:
             logger.error(f"Failed to call tool subprocess: {e}")
             return {"success": False, "error": str(e)}
 
 
-    async def _format_tool_response(self, user_query: str, tool_name: str, raw_response: str, chat_history: Optional[List] = None) -> str:
+    async def _format_tool_response(self, user_query: str, tool_name: str, raw_response: str, chat_history: Optional[List] = None, search_strategy: Optional[Dict[str, str]] = None) -> str:
         """Use LLM to intelligently format tool responses for better user experience."""
         try:
             # Determine response type and format accordingly
@@ -755,25 +828,38 @@ Tool Used: {tool_name}
 Raw Tool Response: {str(raw_response)[:3000]}...
 
 FORMATTING GUIDELINES:
-1. **Be Conversational**: Start with a natural response to their question
-2. **Organize Information**: Present data in logical, scannable format
-3. **Add Context**: Explain what the data means and its reliability
+1. **Summary Section**: Start with clear overview of what was found (total counts, key categories)
+2. **Categorized Results**: Group results by type/category when applicable  
+3. **Structured Presentation**: Use clear headings, bullet points, numbered lists
 4. **Tool-Specific Formatting**:
    - ICD Codes: "**E11.65** - Type 2 diabetes mellitus with hyperglycemia"
-   - Clinical Trials: Include title, status, recruitment info
-   - Research Papers: Include title, authors, key findings
-   - Medical Codes: Group by type/category when relevant
-5. **Include Totals**: Always mention total count when available
-6. **Handle Zero Results**: If no results found, suggest alternative search terms or broader criteria
-7. **End with Action**: Suggest what users can do with this information
+   - Clinical Trials: Include title, status, recruitment info, organized by treatment type
+   - Research Papers: Include title, authors, journal, group by topic
+   - Medical Codes: Group by code system/category
+5. **Context & Reliability**: Brief note about data source and currency
+6. **Next Steps Section**: Provide 3-4 specific actionable follow-up options
+7. **Handle Zero Results**: Suggest alternative search strategies with specific examples
 
 RESPONSE STRUCTURE:
-- Start: Natural intro addressing their question
-- Body: Well-formatted data presentation
-- Context: Brief note about data source/reliability  
-- Action: What they can do next
+## Summary
+[Brief overview with key statistics]
 
-Make it helpful, accurate, and easy to scan. Focus on answering their actual question."""
+## Key Categories Identified
+[Group results by treatment type, status, etc.]
+
+## [Category 1]: 
+[Relevant results with proper formatting]
+
+## [Category 2]:
+[More results organized logically]
+
+## Context & Reliability
+[Brief note about data source, currency, limitations]
+
+## Next Steps
+[3-4 specific actionable options for follow-up]
+
+Make the response scannable, informative, and actionable. Use emojis sparingly for section headers only."""
 
             response = await self.llm.ainvoke(formatting_prompt)
             formatted_text = response.content.strip()
@@ -800,6 +886,141 @@ Tool Used: {tool_name}
         if self.mcp_client:
             await self.mcp_client.close_all_sessions()
 
+    async def _analyze_search_results(self, raw_response: str, search_strategy: Dict[str, str], user_query: str, selected_tool: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze search results to determine if alternative strategies should be suggested."""
+        try:
+            analysis_prompt = f"""Analyze these search results to determine if alternative search strategies should be suggested.
+
+User Query: "{user_query}"
+Search Strategy Used: {search_strategy['approach']} - {search_strategy['reasoning']}
+Tool: {selected_tool['name']}
+Results: {str(raw_response)[:1000]}...
+
+ANALYSIS CRITERIA:
+1. **Result Quality**: Do results directly address the user's intent?
+2. **Result Quantity**: Are there too few results (suggest expanding) or too many irrelevant ones (suggest narrowing)?
+3. **Strategy Mismatch**: Would a different approach (precision vs recall) yield better results?
+
+Respond with EXACTLY this JSON format:
+{{"suggest_alternatives": true/false, "suggestions": "Brief explanation of alternative approaches if suggest_alternatives is true, otherwise empty string"}}"""
+
+            response = await self.llm.ainvoke(analysis_prompt)
+            
+            try:
+                import json
+                return json.loads(response.content.strip())
+            except json.JSONDecodeError:
+                return {"suggest_alternatives": False, "suggestions": ""}
+                                
+        except Exception as e:
+            logger.error(f"❌ Result analysis failed: {e}")
+            return {"suggest_alternatives": False, "suggestions": ""}
+
+    async def _suggest_alternative_strategies(self, search_strategy: Dict[str, str], user_query: str, selected_tool: Dict[str, Any]) -> str:
+        """Suggest alternative search strategies when no results are found."""
+        try:
+            suggestion_prompt = f"""The search returned zero results. Suggest alternative search strategies.
+
+User Query: "{user_query}"
+Strategy Attempted: {search_strategy['approach']} - {search_strategy['reasoning']}
+Tool: {selected_tool['name']}
+
+ALTERNATIVE STRATEGY FRAMEWORK:
+- If attempted High Precision → suggest High Recall (broader terms, synonyms)
+- If attempted High Recall → suggest High Precision (more specific terms) 
+- If attempted Balanced → suggest both directions with examples
+
+Provide 2-3 concrete alternative approaches with specific term suggestions.
+Keep suggestions generic and applicable to any domain."""
+
+            response = await self.llm.ainvoke(suggestion_prompt)
+            return response.content.strip()
+            
+        except Exception as e:
+            logger.error(f"❌ Alternative strategy generation failed: {e}")
+            return "Try adjusting your search terms or using broader/narrower terminology."
+
+    async def _generate_follow_up_questions(self, user_query: str, raw_response: str, selected_tool: Dict[str, Any], chat_history: Optional[List] = None) -> List[str]:
+        """Generate contextual follow-up questions based on the search results."""
+        try:
+            # Build context from chat history
+            history_context = ""
+            if chat_history:
+                history_messages = []
+                for msg in chat_history[-3:]:  # Last 3 messages for context
+                    if hasattr(msg, 'content'):  # LangChain message object
+                        role = "user" if type(msg).__name__ == "HumanMessage" else "assistant"
+                        history_messages.append(f"{role}: {msg.content[:200]}")
+                    else:  # Dict format
+                        role = msg.get('role', 'user')
+                        content = msg.get('content', '')[:200]
+                        history_messages.append(f"{role}: {content}")
+                
+                if history_messages:
+                    history_context = f"\nConversation History:\n" + "\n".join(history_messages) + "\n"
+
+            follow_up_prompt = f"""Generate 3-4 contextual follow-up questions based on the search results and conversation.
+
+User's Original Query: "{user_query}"
+Tool Used: {selected_tool['name']}
+Search Results Summary: {str(raw_response)[:1000]}...
+{history_context}
+
+FOLLOW-UP QUESTION GUIDELINES:
+1. **Build on Current Results**: Questions should explore deeper aspects of the found data
+2. **Explore Related Areas**: Suggest logical extensions or related topics
+3. **Actionable Refinements**: Questions that help narrow/broaden/refine the search
+4. **Practical Applications**: Questions about next steps or implementation
+
+QUESTION TYPES TO GENERATE:
+- Refinement questions (narrow down by criteria)
+- Exploration questions (related topics)
+- Comparison questions (vs other options)
+- Implementation questions (how to use/apply results)
+
+Return EXACTLY this JSON format:
+{{
+  "further_questions": [
+    {{"id": 0, "question": "question 1"}},
+    {{"id": 1, "question": "question 2"}},
+    {{"id": 2, "question": "question 3"}},
+    {{"id": 3, "question": "question 4"}}
+  ]
+}}
+
+Keep questions conversational, specific, and directly relevant to the search domain."""
+
+            response = await self.llm.ainvoke(follow_up_prompt)
+            
+            try:
+                import json
+                # Find JSON in response
+                content = response.content.strip()
+                json_start = content.find("{")
+                json_end = content.rfind("}") + 1
+                if json_start >= 0 and json_end > json_start:
+                    json_str = content[json_start:json_end]
+                    parsed_data = json.loads(json_str)
+                    return parsed_data.get("further_questions", [])
+                else:
+                    return []
+                    
+            except json.JSONDecodeError:
+                logger.error("Failed to parse follow-up questions JSON")
+                return []
+                
+        except Exception as e:
+            logger.error(f"❌ Follow-up question generation failed: {e}")
+            return []
+
+    def get_follow_up_questions(self) -> List[Dict[str, Any]]:
+        """Get the last generated follow-up questions."""
+        return getattr(self, '_follow_up_questions', [])
+
+    def clear_follow_up_questions(self):
+        """Clear the stored follow-up questions."""
+        self._follow_up_questions = []
+
 
 async def create_discovery_agent(db_session: AsyncSession, user_id: str, toolrow_api_token: Optional[str] = None) -> SourceDiscoveryAgent:
     """Create and initialize a discovery agent."""
@@ -821,6 +1042,8 @@ async def create_discovery_agent(db_session: AsyncSession, user_id: str, toolrow
         agent.agent = agent._create_minimal_agent()
     
     return agent
+
+
 
 
 # Simple test function
