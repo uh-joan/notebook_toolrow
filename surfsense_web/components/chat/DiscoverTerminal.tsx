@@ -21,6 +21,7 @@ interface Message {
 export default function DiscoverTerminal({ message, open = false }: { message: Message; open?: boolean }) {
 	const [isCollapsed, setIsCollapsed] = useState(!open);
 	const [isAutoCollapsing, setIsAutoCollapsing] = useState(false);
+	const [hasAutoCollapsed, setHasAutoCollapsed] = useState(false);
 	const bottomRef = useRef<HTMLDivElement>(null);
 
 	if (!message || message.role !== "assistant") {
@@ -38,15 +39,17 @@ export default function DiscoverTerminal({ message, open = false }: { message: M
 	};
 	const collapseAnnotation = getAnnotationData(messageForCollapseCheck, "TERMINAL_COLLAPSE");
 	
-	// Auto-collapse terminal when completion annotation is received
+	// Auto-collapse terminal when completion annotation is received (only once)
 	useEffect(() => {
-		if (collapseAnnotation && collapseAnnotation.length > 0) {
+		if (collapseAnnotation && collapseAnnotation.length > 0 && !hasAutoCollapsed) {
 			// Check if should auto-collapse
 			const shouldAutoCollapse = collapseAnnotation.some((annotation: any) => 
 				annotation?.auto_collapse === true || annotation?.data?.auto_collapse === true
 			);
 			
 			if (shouldAutoCollapse) {
+				// Mark that auto-collapse has been triggered
+				setHasAutoCollapsed(true);
 				// Add a small delay for better UX (let user see the completion)
 				setIsAutoCollapsing(true);
 				setTimeout(() => {
@@ -55,7 +58,7 @@ export default function DiscoverTerminal({ message, open = false }: { message: M
 				}, 1500); // 1.5 second delay
 			}
 		}
-	}, [collapseAnnotation]);
+	}, [collapseAnnotation, hasAutoCollapsed]);
 
 	// Extract terminal events from live annotations (like researcher agent) and fallback to final data
 	let events: TerminalEvent[] = [];

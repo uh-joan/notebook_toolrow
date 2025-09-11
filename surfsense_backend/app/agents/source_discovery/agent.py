@@ -841,6 +841,9 @@ FORMATTING GUIDELINES:
 7. **Handle Zero Results**: Suggest alternative search strategies with specific examples
 
 RESPONSE STRUCTURE:
+# [Create a Clear, Specific Title Based on the Query]
+[E.g., "ICD-10 Codes for Diabetes", "Clinical Trials for Obesity Treatment", "FDA-Approved T2D Medications"]
+
 ## Summary
 [Brief overview with key statistics]
 
@@ -859,7 +862,7 @@ RESPONSE STRUCTURE:
 ## Next Steps
 [3-4 specific actionable options for follow-up]
 
-Make the response scannable, informative, and actionable. Use emojis sparingly for section headers only."""
+Make the response scannable, informative, and actionable. Start with a clear title that summarizes what was found. Use emojis sparingly for section headers only."""
 
             response = await self.llm.ainvoke(formatting_prompt)
             formatted_text = response.content.strip()
