@@ -19,6 +19,7 @@ from ..toolrow_mcp.client import ToolrowMCPManager
 from ..users import current_active_user, User
 from ..db import get_async_session, Document, DocumentType, Chat, ChatType
 from ..tasks.document_processors.markdown_processor import add_received_markdown_file_document
+from ..services.streaming_service import StreamingService
 
 logger = logging.getLogger(__name__)
 
@@ -882,15 +883,34 @@ async def discovery_chat_stream(
                 
                 logger.info(f"🔗 Passing {len(chat_history)} previous messages to discovery agent")
                 
+                # Separate terminal events from final content
+                terminal_content = ""
+                final_content_started = False
+                
                 async for chunk in agent.discover_sources(query, chat_history=chat_history):
                     if chunk.strip():
-                        full_response += chunk
-                        final_response_parts.append(chunk)
-                        
-                        # Enhanced terminal events with better categorization
                         chunk_lower = chunk.lower()
                         
-                        # Categorize different types of log messages
+                        # Check if this is final formatted content (structured response patterns)
+                        is_final_content = (
+                            chunk.startswith("## Summary") or 
+                            chunk.startswith("Summary") or 
+                            chunk.startswith("# ") or  # Any heading
+                            "## Key Categories Identified" in chunk or
+                            "## Context & Reliability" in chunk or
+                            "## Next Steps" in chunk or
+                            final_content_started
+                        )
+                        if is_final_content:
+                            final_content_started = True
+                            full_response += chunk
+                            final_response_parts.append(chunk)
+                            continue
+                        
+                        # This is terminal content - only send to terminal, not final response
+                        terminal_content += chunk
+                        
+                        # Enhanced terminal events with better categorization
                         if any(indicator in chunk_lower for indicator in ["🚀", "initializing", "starting"]):
                             yield stream_terminal_event("info", f"Step {step_counter}: {chunk.strip()}")
                             step_counter += 1
@@ -932,8 +952,19 @@ async def discovery_chat_stream(
                 
                 yield stream_terminal_event("success", f"✅ Discovery completed: {result.total_found} sources found")
                 
+                # Send terminal auto-collapse annotation
+                collapse_annotation = {
+                    "type": "TERMINAL_COLLAPSE", 
+                    "data": {"auto_collapse": True}
+                }
+                yield f"8:[{json.dumps(collapse_annotation)}]\n"
+                
                 # Use the full response from the agent as the final content
-                final_content = full_response.strip() if full_response.strip() else f"I completed the search for: {query}"
+                # If separation didn't work (no structured content detected), use a meaningful fallback
+                if not full_response.strip():
+                    final_content = f"I searched for '{query}' using {len(available_tools) if 'available_tools' in locals() else 'multiple'} research tools. Please check the Discovery Process Terminal above for detailed execution steps."
+                else:
+                    final_content = full_response.strip()
                 
                 # Ensure final_content is always a string and not empty
                 if not isinstance(final_content, str):
@@ -950,6 +981,13 @@ async def discovery_chat_stream(
                 # Send final content as text chunk (same as researcher agent)
                 logger.info(f"🔍 Sending text chunk: {final_content[:100]}...")
                 yield f"0:{json.dumps(final_content)}\n"
+                
+                # Send follow-up questions using StreamingService (same as researcher agent)
+                follow_up_questions = agent.get_follow_up_questions()
+                if follow_up_questions:
+                    logger.info(f"🤔 Sending {len(follow_up_questions)} follow-up questions")
+                    streaming_service = StreamingService()
+                    yield streaming_service.format_further_questions_delta(follow_up_questions)
                 
                 # Send completion data with all the discovery metadata
                 completion_data = {
