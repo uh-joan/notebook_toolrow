@@ -12,6 +12,7 @@ import json
 import uuid
 import time
 from collections import defaultdict
+from langchain_core.messages import HumanMessage, AIMessage
 
 from ..agents.source_discovery import create_discovery_agent, DiscoveryRequest, DiscoveryResult, SourceSuggestion
 from ..toolrow_mcp.client import ToolrowMCPManager
@@ -871,7 +872,17 @@ async def discovery_chat_stream(
                 final_response_parts = []
                 step_counter = 1
                 
-                async for chunk in agent.discover_sources(query):
+                # Convert messages to format expected by the agent
+                chat_history = []
+                for msg in messages[:-1]:  # Exclude the latest message as it's the current query
+                    if msg["role"] == "user":
+                        chat_history.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        chat_history.append(AIMessage(content=msg["content"]))
+                
+                logger.info(f"🔗 Passing {len(chat_history)} previous messages to discovery agent")
+                
+                async for chunk in agent.discover_sources(query, chat_history=chat_history):
                     if chunk.strip():
                         full_response += chunk
                         final_response_parts.append(chunk)

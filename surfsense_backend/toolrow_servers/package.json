@@ -1,6 +1,7 @@
 {
   "name": "surfsense-toolrow-servers",
   "version": "1.0.0",
+  "type": "module",
   "description": "Local Toolrow MCP servers for SurfSense discovery agent",
   "main": "toolrow_mcp_server.js",
   "scripts": {

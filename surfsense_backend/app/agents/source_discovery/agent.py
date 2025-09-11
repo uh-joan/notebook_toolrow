@@ -184,6 +184,14 @@ class SourceDiscoveryAgent:
                 yield "❌ Agent not initialized\n"
                 return
             
+            # Debug logging for chat history
+            if chat_history:
+                logger.info(f"🔗 Received {len(chat_history)} messages in chat history")
+                for i, msg in enumerate(chat_history):
+                    logger.info(f"  Message {i}: {type(msg).__name__} - {msg.content[:100]}...")
+            else:
+                logger.info("📝 No chat history provided")
+            
             yield f"🚀 Starting research for: '{user_input}'\n"
             yield "🔄 Connecting to research databases...\n"
             
@@ -223,8 +231,10 @@ class SourceDiscoveryAgent:
                     if hasattr(self.agent, 'tools') and self.agent.tools and len(self.agent.tools) > 0:
                         result = await self.agent.run(prompt)
                     else:
-                        # Use direct tool execution (but don't mention it to user)
-                        result = await self._execute_with_direct_tools(prompt, tools, user_input, chat_history)
+                        # Use direct tool execution with streaming feedback
+                        async for chunk in self._execute_with_direct_tools_streaming(prompt, tools, user_input, chat_history):
+                            yield chunk
+                        return  # Exit early since we've already streamed everything
                 else:
                     yield "❌ Research tools temporarily unavailable\n"
                     result = "I apologize, but the research tools are temporarily unavailable. Please try again in a few moments."
@@ -259,10 +269,18 @@ class SourceDiscoveryAgent:
         
         history_context = ""
         if chat_history:
-            history_context = "\nConversation History:\n" + "\n".join([
-                f"{msg.get('role', 'user')}: {msg.get('content', '')}"
-                for msg in chat_history[-3:]  # Last 3 messages for context
-            ]) + "\n"
+            history_messages = []
+            for msg in chat_history[-3:]:  # Last 3 messages for context
+                if hasattr(msg, 'content'):  # LangChain message object
+                    role = "user" if type(msg).__name__ == "HumanMessage" else "assistant"
+                    history_messages.append(f"{role}: {msg.content}")
+                else:  # Dict format
+                    role = msg.get('role', 'user')
+                    content = msg.get('content', '')
+                    history_messages.append(f"{role}: {content}")
+            
+            if history_messages:
+                history_context = "\nConversation History:\n" + "\n".join(history_messages) + "\n"
         
         return f"""You are a source discovery agent with access to ToolRow research tools.
 
@@ -313,6 +331,65 @@ Use the most relevant tool to provide authoritative results for: "{user_input}"
             logger.error(f"❌ Direct tool execution failed: {e}")
             return f"Unable to execute direct tool access: {str(e)}"
 
+    async def _execute_with_direct_tools_streaming(self, prompt: str, available_tools: List[Dict[str, Any]], user_input: str, chat_history: Optional[List] = None) -> AsyncGenerator[str, None]:
+        """Execute discovery using direct tool access with streaming feedback."""
+        try:
+            logger.info(f"🔧 Direct tool execution with {len(available_tools)} tools")
+            
+            # Step 1: Tool Selection
+            yield "🎯 Analyzing your query to select the best research tool...\n"
+            
+            tool_names = [tool['name'] for tool in available_tools]
+            selected_tool = await self._select_tool_with_llm(user_input, available_tools, chat_history)
+            
+            if selected_tool:
+                yield f"✅ Selected: **{selected_tool['name']}** - {selected_tool.get('description', 'Specialized research tool')}\n"
+                
+                # Step 2: Parameter Extraction
+                yield "⚙️ Extracting search parameters from your query...\n"
+                
+                params = await self._extract_tool_parameters(selected_tool, user_input, chat_history)
+                
+                # Show the parameters in a user-friendly way
+                yield f"📋 Search parameters configured:\n"
+                for key, value in params.items():
+                    if isinstance(value, str) and len(value) > 50:
+                        display_value = value[:47] + "..."
+                    else:
+                        display_value = value
+                    yield f"  • {key}: {display_value}\n"
+                
+                # Step 3: Tool Execution
+                yield "🔍 Executing search with configured parameters...\n"
+                
+                result = await self._call_tool_subprocess(selected_tool['name'], params)
+                
+                yield "─" * 50 + "\n"
+                yield "📋 Processing search results...\n"
+                yield "📄 Research Results:\n\n"
+                
+                # Format and stream the result
+                if result:
+                    formatted_result = await self._format_tool_response(user_input, selected_tool['name'], result, chat_history)
+                    yield formatted_result
+                else:
+                    yield "No results found for your query. Try adjusting your search terms.\n"
+                
+            else:
+                yield "❌ Unable to select appropriate research tool\n"
+                general_result = await self._provide_general_guidance(user_input, available_tools)
+                yield general_result
+                
+            yield "\n" + "═" * 50 + "\n"
+            yield "✅ Research completed successfully!\n"
+            yield f"🎯 Search query: '{user_input}'\n"
+            yield f"📊 Databases searched: {len(available_tools)}\n"
+            yield "💡 Results are ready for your review\n"
+            
+        except Exception as e:
+            logger.error(f"❌ Streaming tool execution failed: {e}")
+            yield f"❌ Research error: {str(e)}\n"
+
     async def _select_tool_with_llm(self, user_input: str, available_tools: List[Dict[str, Any]], chat_history: Optional[List] = None) -> Optional[Dict[str, Any]]:
         """Use LLM to intelligently select the most appropriate tool for the query."""
         try:
@@ -329,7 +406,11 @@ Use the most relevant tool to provide authoritative results for: "{user_input}"
                 # Check if previous query used a specific tool
                 previous_tools_used = []
                 for msg in chat_history[-3:]:
-                    content = msg.get('content', '')
+                    if hasattr(msg, 'content'):  # LangChain message object
+                        content = msg.content
+                    else:  # Dict format
+                        content = msg.get('content', '')
+                    
                     if 'Tool Used:' in content:
                         tool_match = content.split('Tool Used:')[1].split('\n')[0].strip()
                         if tool_match:
@@ -337,6 +418,7 @@ Use the most relevant tool to provide authoritative results for: "{user_input}"
                 
                 if previous_tools_used:
                     history_context = f"\nConversation Context:\nPrevious tool used: {previous_tools_used[-1]}\n"
+                    history_context += f"IMPORTANT: This appears to be a follow-up query. Use the SAME tool ({previous_tools_used[-1]}) to refine the search.\n"
 
             # Create a prompt for tool selection
             selection_prompt = f"""Given the user query and available tools, select the most appropriate tool to use.
@@ -406,14 +488,12 @@ Tool Selection:"""
                 else:
                     response_text = f"Tool response error: unexpected data format: {data}"
                 
-                return f"""**Tool Execution Results**
-
-Query: {user_input}
-Tool Used: {tool_name}
-
-{response_text}
-
-*Real-time data from {tool_name} tool*"""
+                # Format the response intelligently using LLM
+                formatted_response = await self._format_tool_response(
+                    user_input, tool_name, response_text, chat_history
+                )
+                
+                return formatted_response
             else:
                 return f"""**Tool Execution Attempted**
 
@@ -455,16 +535,24 @@ Tool call attempted but no results returned. Error: {result.get('error', 'Unknow
             history_context = ""
             if chat_history:
                 logger.info(f"📝 Chat history available: {len(chat_history)} messages")
-                history_context = "\nConversation History:\n" + "\n".join([
-                    f"{msg.get('role', 'user')}: {msg.get('content', '')}"
-                    for msg in chat_history[-3:]  # Last 3 messages for context
-                ]) + "\n"
+                history_messages = []
+                for msg in chat_history[-3:]:  # Last 3 messages for context
+                    if hasattr(msg, 'content'):  # LangChain message object
+                        role = "user" if type(msg).__name__ == "HumanMessage" else "assistant"
+                        history_messages.append(f"{role}: {msg.content}")
+                    else:  # Dict format
+                        role = msg.get('role', 'user')
+                        content = msg.get('content', '')
+                        history_messages.append(f"{role}: {content}")
+                
+                if history_messages:
+                    history_context = "\nConversation History:\n" + "\n".join(history_messages) + "\n"
                 
                 # Add previous parameters if available for the same tool
                 if hasattr(self, '_last_tool_params') and tool_name in self._last_tool_params:
                     prev_params = self._last_tool_params[tool_name]
-                    history_context += f"\nPrevious Parameters for {tool_name}:\n{prev_params}\n"
-                    logger.info(f"📝 Including previous parameters: {prev_params}")
+                    history_context += f"\nPrevious Parameters for {tool_name}:\n{json.dumps(prev_params, indent=2)}\n"
+                    logger.info(f"📝 Including previous parameters: {json.dumps(prev_params, indent=2)}")
                 
                 logger.info(f"📝 History context for parameter extraction: {history_context[:200]}...")
             else:
@@ -490,10 +578,10 @@ Instructions:
   * MODIFY only the relevant parameters based on the new criteria
   * KEEP all other parameters unchanged unless explicitly overridden
 - Examples of parameter evolution:
-  * Previous: {"method": "icd-10-cm", "terms": "diabetes"} 
-  * Query: "only type 2" → {"method": "icd-10-cm", "terms": "type 2 diabetes"}
-  * Previous: {"condition": "obesity", "location": "California"}
-  * Query: "filter for GLP-1" → {"condition": "obesity", "location": "California", "intervention": "GLP-1"}
+  * Previous: {{"method": "icd-10-cm", "terms": "diabetes"}} 
+  * Query: "only type 2" → {{"method": "icd-10-cm", "terms": "type 2 diabetes"}}
+  * Previous: {{"condition": "obesity", "location": "California"}}
+  * Query: "filter for GLP-1" → {{"condition": "obesity", "location": "California", "intervention": "GLP-1"}}
 - If a parameter has a description, use that to understand what values to extract
 - Return ONLY a valid JSON object with the extracted parameters
 - Use proper data types (string, number, boolean, array) as specified in the schema
@@ -516,7 +604,7 @@ Parameters JSON:"""
                 # Fallback: create basic parameters
                 params = self._create_basic_parameters(tool_name, user_input)
             
-            logger.info(f"📋 Final extracted parameters for {tool_name}: {params}")
+            logger.info(f"📋 Final extracted parameters for {tool_name}: {json.dumps(params, indent=2)}")
             logger.info(f"📝 Parameter extraction used history: {'YES' if chat_history else 'NO'}")
             
             # Store parameters in conversation context for future follow-ups
@@ -528,7 +616,7 @@ Parameters JSON:"""
             return params
             
         except Exception as e:
-            logger.error(f"❌ Parameter extraction failed: {e}")
+            logger.error(f"❌ Parameter extraction failed: {str(e)}")
             return self._create_basic_parameters(tool.get('name', ''), user_input)
 
     def _create_basic_parameters(self, tool_name: str, user_input: str) -> dict:
@@ -650,6 +738,62 @@ Parameters JSON:"""
             logger.error(f"Failed to call tool subprocess: {e}")
             return {"success": False, "error": str(e)}
 
+
+    async def _format_tool_response(self, user_query: str, tool_name: str, raw_response: str, chat_history: Optional[List] = None) -> str:
+        """Use LLM to intelligently format tool responses for better user experience."""
+        try:
+            # Determine response type and format accordingly
+            context = ""
+            if chat_history:
+                context = f"\nConversation Context: This is a follow-up to previous queries in this conversation.\n"
+            
+            formatting_prompt = f"""Transform this technical tool response into a natural, conversational answer for the user.
+
+User's Question: "{user_query}"
+Tool Used: {tool_name}
+{context}
+Raw Tool Response: {str(raw_response)[:3000]}...
+
+FORMATTING GUIDELINES:
+1. **Be Conversational**: Start with a natural response to their question
+2. **Organize Information**: Present data in logical, scannable format
+3. **Add Context**: Explain what the data means and its reliability
+4. **Tool-Specific Formatting**:
+   - ICD Codes: "**E11.65** - Type 2 diabetes mellitus with hyperglycemia"
+   - Clinical Trials: Include title, status, recruitment info
+   - Research Papers: Include title, authors, key findings
+   - Medical Codes: Group by type/category when relevant
+5. **Include Totals**: Always mention total count when available
+6. **Handle Zero Results**: If no results found, suggest alternative search terms or broader criteria
+7. **End with Action**: Suggest what users can do with this information
+
+RESPONSE STRUCTURE:
+- Start: Natural intro addressing their question
+- Body: Well-formatted data presentation
+- Context: Brief note about data source/reliability  
+- Action: What they can do next
+
+Make it helpful, accurate, and easy to scan. Focus on answering their actual question."""
+
+            response = await self.llm.ainvoke(formatting_prompt)
+            formatted_text = response.content.strip()
+            
+            # Add technical attribution
+            formatted_text += f"\n\n*Source: {tool_name} • Real-time data*"
+            
+            return formatted_text
+            
+        except Exception as e:
+            logger.error(f"❌ Response formatting failed: {e}")
+            # Fallback to basic formatting
+            return f"""**Tool Execution Results**
+
+Query: {user_query}
+Tool Used: {tool_name}
+
+{raw_response}
+
+*Real-time data from {tool_name} tool*"""
 
     async def cleanup(self):
         """Clean up resources."""

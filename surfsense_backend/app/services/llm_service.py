@@ -1,6 +1,9 @@
 import logging
 
-from langchain_community.chat_models import ChatLiteLLM
+try:
+    from langchain_litellm import ChatLiteLLM
+except ImportError:
+    from langchain_community.chat_models import ChatLiteLLM
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
