@@ -33,6 +33,20 @@ class SaveSourceRequest(BaseModel):
     source_suggestion: Dict[str, Any]  # The suggestion object from discovery results
     export_format: str = "markdown"  # markdown, csv, json, docx
 
+# Request/Response models for save-answer endpoint
+class SaveAnswerRequest(BaseModel):
+    """Request to save a discovery final answer to the knowledge base."""
+    search_space_id: int
+    content: str  # The final answer content
+    format: str = "md"  # md, docx, pdf
+    title: str = "Discovery Answer"
+
+class SaveAnswerResponse(BaseModel):
+    """Response from saving a discovery answer."""
+    success: bool
+    message: str
+    document_id: Optional[int] = None
+
 
 class SaveSourceResponse(BaseModel):
     """Response from saving a discovered source."""
@@ -710,6 +724,56 @@ async def save_discovered_source(
         raise HTTPException(status_code=500, detail=f"Failed to save source: {str(e)}")
 
 
+@router.post("/save-answer", response_model=SaveAnswerResponse)
+async def save_discovery_answer(
+    request: SaveAnswerRequest,
+    user: User = Depends(current_active_user),
+    db_session: AsyncSession = Depends(get_async_session),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    Save a discovery final answer to the knowledge base as a document.
+    
+    Supports different formats:
+    - md: Save as markdown document  
+    - docx: Save as DOCX document
+    - pdf: Save as PDF document
+    """
+    try:
+        # Check ownership of search space
+        from ..utils.check_ownership import check_ownership  
+        from ..db import SearchSpace
+        await check_ownership(db_session, SearchSpace, request.search_space_id, user)
+        
+        # Create document metadata
+        document_metadata = {
+            "source_type": "discovery_answer",
+            "export_format": request.format,
+            "discovery_timestamp": str(uuid.uuid4()),
+            "created_by": "source_discovery_agent"
+        }
+        
+        # Use the markdown processor to add the document
+        background_tasks.add_task(
+            add_received_markdown_file_document,
+            session=db_session,
+            file_name=f"{request.title}.{request.format}",
+            file_in_markdown=request.content,
+            search_space_id=request.search_space_id,
+            user_id=user.id
+        )
+        
+        return SaveAnswerResponse(
+            success=True,
+            message=f"Discovery answer '{request.title}' queued for processing as {request.format.upper()}",
+            document_id=None  # Will be set after processing
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to save discovery answer: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save discovery answer: {str(e)}")
+
+
 @router.post("/format-response", response_model=FormatResponseResponse)
 async def format_discovery_response(
     request: FormatResponseRequest,
@@ -893,12 +957,15 @@ async def discovery_chat_stream(
                         
                         # Check if this is final formatted content (structured response patterns)
                         is_final_content = (
-                            chunk.startswith("## Summary") or 
-                            chunk.startswith("Summary") or 
-                            chunk.startswith("# ") or  # Any heading
-                            "## Key Categories Identified" in chunk or
-                            "## Context & Reliability" in chunk or
-                            "## Next Steps" in chunk or
+                            chunk.startswith("# ") or  # Main title heading 
+                            chunk.startswith("## ") or  # Section headings
+                            chunk.startswith("### ") or  # Subsection headings
+                            "Summary" in chunk or
+                            "Key Categories" in chunk or
+                            "Context & Reliability" in chunk or
+                            "Next Steps" in chunk or
+                            chunk.startswith("- **") or  # Structured list items
+                            chunk.startswith("**") or  # Bold text sections
                             final_content_started
                         )
                         if is_final_content:
