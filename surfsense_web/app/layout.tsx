@@ -42,6 +42,11 @@ export const metadata: Metadata = {
 		"AI document assistant tools",
 		"AI-powered search assistant",
 	],
+	icons: {
+		icon: "/sb_s_red.png",
+		shortcut: "/sb_s_red.png",
+		apple: "/sb_s_red.png",
+	},
 	openGraph: {
 		title: "SourceBook – AI Research & Knowledge Management Assistant",
 		description:
