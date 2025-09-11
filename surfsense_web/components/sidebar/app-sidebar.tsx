@@ -57,7 +57,7 @@ const defaultData = {
 	user: {
 		name: "Surf",
 		email: "m@example.com",
-		avatar: "/icon-128.png",
+		avatar: "/sb_s_red.png",
 	},
 	navMain: [
 		{

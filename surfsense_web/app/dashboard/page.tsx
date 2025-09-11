@@ -193,7 +193,7 @@ const DashboardPage = () => {
 		email:
 			user?.email ||
 			(isLoadingUser ? "Loading..." : userError ? "Error loading user" : "Unknown User"),
-		avatar: "/icon-128.png", // Default avatar
+		avatar: "/sb_s_red.png", // Default avatar
 	};
 
 	if (loading) return <LoadingScreen />;
@@ -239,8 +239,8 @@ const DashboardPage = () => {
 					<div className="flex flex-row space-x-4">
 						<Logo className="w-10 h-10 rounded-md" />
 						<div className="flex flex-col space-y-2">
-							<h1 className="text-4xl font-bold">SurfSense Dashboard</h1>
-							<p className="text-muted-foreground">Welcome to your SurfSense dashboard.</p>
+							<h1 className="text-4xl font-bold">SourceBook Dashboard</h1>
+							<p className="text-muted-foreground">Welcome to your SourceBook dashboard.</p>
 						</div>
 					</div>
 					<div className="flex items-center space-x-3">
