@@ -1,0 +1,241 @@
+[
+  {
+    "name": "ct_gov_studies",
+    "version": "1.0.0",
+    "description": "ClinicalTrials.gov: search, suggest terms, or fetch a study.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "method": { "type": "string", "enum": ["search", "suggest", "get"] },
+        "q": {
+          "type": "string",
+          "description": "Advanced CT.gov expression or plain terms. Supports AND/OR/NOT, AREA[], RANGE[], parentheses."
+        },
+        "condition": {
+          "type": "string", 
+          "description": "Primary condition to search for (e.g., 'diabetes', 'heart failure', 'cancer')."
+        },
+        "intervention": {
+          "type": "string",
+          "description": "Intervention or treatment being studied (e.g., 'aspirin', 'immunotherapy')."
+        },
+        "location": {
+          "type": "string",
+          "description": "Geographic location filter (e.g., 'Boston', 'Texas', 'United States')."
+        },
+        "purpose": {
+          "type": "string",
+          "enum": ["treatment", "prevention", "diagnostic", "supportive", "screening", "basicscience", "other"],
+          "description": "Primary purpose of the study."
+        },
+        "filters": {
+          "type": "object",
+          "description": "Optional common filters (used when method=search).",
+          "properties": {
+            "phase": { "type": "string", "enum": ["PHASE0","EARLY_PHASE1","PHASE1","PHASE2","PHASE3","PHASE4","NA"] },
+            "study_type": { "type": "string", "enum": ["interventional","observational","expanded_access"] },
+            "status": { "type": "string", "description": "CT.gov recruitment/completion status (e.g., recruiting, completed)." }
+          },
+          "additionalProperties": true
+        },
+        "date": {
+          "type": "object",
+          "description": "Optional date ranges (YYYY-MM-DD).",
+          "properties": {
+            "start": { "type": "object", "properties": { "from": { "type": "string" }, "to": { "type": "string" } }, "additionalProperties": false },
+            "primary_completion": { "type": "object", "properties": { "from": { "type": "string" }, "to": { "type": "string" } }, "additionalProperties": false },
+            "first_posted": { "type": "object", "properties": { "from": { "type": "string" }, "to": { "type": "string" } }, "additionalProperties": false },
+            "results_first_posted": { "type": "object", "properties": { "from": { "type": "string" }, "to": { "type": "string" } }, "additionalProperties": false },
+            "last_update_posted": { "type": "object", "properties": { "from": { "type": "string" }, "to": { "type": "string" } }, "additionalProperties": false },
+            "completion": { "type": "object", "properties": { "from": { "type": "string" }, "to": { "type": "string" } }, "additionalProperties": false }
+          },
+          "additionalProperties": false
+        },
+        "sort": {
+          "type": "string",
+          "enum": ["@relevance","StudyFirstPostDate","LastUpdatePostDate","NCTId","StartDate","PrimaryCompletionDate","CompletionDate","EnrollmentCount"]
+        },
+        "pageSize": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+        "page_token": { "type": "string" },
+        "fields": { "type": "array", "items": { "type": "string" } },
+        "input": { "type": "string", "minLength": 2, "description": "For method=suggest." },
+        "dictionary": { "type": "string", "enum": ["Condition","InterventionName","LeadSponsorName","LocationFacility"], "description": "For method=suggest." },
+        "nct_id": {
+          "type": "string",
+          "pattern": "^[Nn][Cc][Tt]0*[1-9]\\d{0,7}$",
+          "description": "For method=get."
+        },
+        "format": { "type": "string", "enum": ["json","csv","json.zip","fhir.json","ris"], "default": "json" },
+        "markup_format": { "type": "string", "enum": ["markdown","legacy"], "default": "markdown" }
+      },
+      "required": ["method"],
+      "additionalProperties": false
+    },
+    "examples": [
+      { "method": "search", "q": "(diabetes OR \"metabolic syndrome\") AND AREA[Phase]PHASE2", "pageSize": 10 },
+      { "method": "search", "condition": "diabetes", "purpose": "treatment", "pageSize": 5 },
+      { "method": "search", "intervention": "aspirin", "location": "Boston", "pageSize": 10 },
+      { "method": "get", "nct_id": "NCT00841061" },
+      { "method": "suggest", "input": "diab", "dictionary": "Condition" }
+    ]
+  },
+  {
+    "name": "nlm_ct_codes",
+    "version": "1.0.0",
+    "description": "NLM Clinical Tables: search across ICD-10-CM, ICD-11, HCPCS LII, NPI (org/ind), HPO, Conditions, RxTerms, LOINC Q/Form, NCBI Genes, and Major Surgeries/Implants.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["icd-10-cm","icd-11","hcpcs-LII","npi-organizations","npi-individuals","hpo-vocabulary","conditions","rx-terms","loinc-questions","ncbi-genes","major-surgeries-implants"],
+          "description": "The coding system to search"
+        },
+        "terms": { "type": "string", "description": "Search text or medical terms to find matches." },
+        "maxList": { "type": "integer", "minimum": 1, "maximum": 500, "default": 7, "description": "Maximum number of results to return." },
+        "search_fields": { "type": "array", "items": { "type": "string" } },
+        "fields": { "type": "array", "items": { "type": "string" }, "description": "Fields to return." },
+        "extra_fields": { "type": "array", "items": { "type": "string" } },
+        "additional_query": { "type": "string", "description": "Optional advanced filtering (dataset-specific)." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 7 },
+        "offset": { "type": "integer", "minimum": 0, "default": 0 }
+      },
+      "required": ["method","terms"],
+      "additionalProperties": false
+    },
+    "examples": [
+      { "method": "icd-10-cm", "terms": "hypertension", "limit": 10 },
+      { "method": "hcpcs-LII", "terms": "wheelchair", "extra_fields": ["short_desc","long_desc"] }
+    ]
+  },
+  {
+    "name": "pubmed_articles",
+    "version": "1.0.0",
+    "description": "PubMed: search literature, get article metadata, or fetch PDF (when available).",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "method": { "type": "string", "enum": ["search","get_metadata","get_pdf","search_keywords","search_advanced","get_article_metadata","get_article_pdf"] },
+        "q": { "type": "string", "description": "Query string (supports PubMed operators) for method=search." },
+        "keywords": { "type": "string", "description": "For search_keywords: Search query with keywords, medical terms, drug names, diseases." },
+        "num_results": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10, "description": "For search methods: Maximum number of results to return." },
+        "term": { "type": "string", "description": "For search_advanced: General search term for title, abstract, and keywords." },
+        "title": { "type": "string", "description": "For search_advanced: Search specifically in article titles." },
+        "author": { "type": "string", "description": "For search_advanced: Author name(s) to search for." },
+        "journal": { "type": "string", "description": "For search_advanced: Journal name or abbreviation." },
+        "start_date": { "type": "string", "description": "For search_advanced: Start date for publication date range in format YYYY/MM/DD." },
+        "end_date": { "type": "string", "description": "For search_advanced: End date for publication date range in format YYYY/MM/DD." },
+        "filters": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "author": { "type": "string" },
+            "journal": { "type": "string" },
+            "date_range": {
+              "type": "object",
+              "properties": { "from": { "type": "string" }, "to": { "type": "string" } },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+        "pmid": { "oneOf": [{ "type": "string" }, { "type": "integer" }], "description": "For get_* methods." }
+      },
+      "required": ["method"],
+      "additionalProperties": false
+    },
+    "examples": [
+      { "method": "search", "q": "semaglutide cardiovascular outcomes", "limit": 10 },
+      { "method": "search_keywords", "keywords": "diabetes treatment", "num_results": 20 },
+      { "method": "search_advanced", "term": "cancer", "author": "Smith J", "journal": "Nature", "start_date": "2020/01/01" },
+      { "method": "get_metadata", "pmid": "37912345" }
+    ]
+  },
+  {
+    "name": "sec_edgar",
+    "version": "1.0.0",
+    "description": "SEC EDGAR: companies, filings, and XBRL (concepts/frames).",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["search_companies","get_company_cik","get_company_submissions","get_company_facts","get_company_concept","get_frames_data","filter_filings","get_dimensional_facts"]
+        },
+        "query": { "type": "string", "description": "Company name or ticker (search_companies)." },
+        "ticker": { "type": "string", "description": "For get_company_cik: Stock ticker symbol to convert to CIK." },
+        "cik_or_ticker": { "type": "string", "description": "CIK (10 digits) or ticker." },
+        "taxonomy": { "type": "string", "description": "e.g., us-gaap, dei (for concept/frames)." },
+        "tag": { "type": "string", "description": "XBRL concept tag (for concept/frames)." },
+        "unit": { "type": "string", "description": "e.g., USD, shares (for frames)." },
+        "frame": { "type": "string", "description": "e.g., CY2024Q4I, CY2024 (for frames)." },
+
+        "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+      },
+      "required": ["method"],
+      "additionalProperties": false
+    },
+    "examples": [
+      { "method": "search_companies", "query": "GSK" },
+      { "method": "get_company_cik", "ticker": "AAPL" },
+      { "method": "get_company_concept", "cik_or_ticker": "AAPL", "taxonomy": "us-gaap", "tag": "Revenues" }
+    ]
+  },
+  {
+    "name": "who_health",
+    "version": "1.0.0",
+    "description": "WHO GHO (OData): dimensions, indicators, and data with $filter/$top.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["get_dimensions","get_dimension_codes","search_indicators","get_health_data","get_country_data","get_cross_table"]
+        },
+        "dimension_code": { "type": "string", "description": "For get_dimension_codes." },
+        "keywords": { "type": "string", "description": "For search_indicators." },
+        "indicator_code": { "type": "string", "description": "For data endpoints." },
+        "filter": { "type": "string", "description": "OData $filter (e.g., SpatialDim eq 'GBR' and TimeDim ge 2015)." },
+        "top": { "type": "integer", "minimum": 1, "maximum": 10000, "default": 100 },
+        "country_code": { "type": "string", "description": "ISO3 (e.g., GBR, USA)." },
+        "region_code": { "type": "string", "description": "WHO region (AMR, EUR, etc.)." },
+        "year": { "type": "string", "description": "Year or range (e.g., 2020 or 2015:2020)." }
+      },
+      "required": ["method"],
+      "additionalProperties": false
+    },
+    "examples": [
+      { "method": "search_indicators", "keywords": "life expectancy" },
+      { "method": "get_health_data", "indicator_code": "WHOSIS_000001", "filter": "SpatialDim eq 'GBR' and TimeDim ge 2010", "top": 200 }
+    ]
+  },
+  {
+    "name": "fda_info",
+    "version": "1.0.0",
+    "description": "openFDA: drugs/devices across labels, events, recalls, 510(k), PMA, UDI, etc.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "dataset": {
+          "type": "string",
+          "enum": [
+            "drug_label","drug_event","drug_enforcement","drug_shortage","device_registration","device_pma","device_510k","device_udi","device_enforcement","device_event","device_classification"
+          ]
+        },
+        "q": {
+          "type": "string",
+          "description": "openFDA query (supports fielded search, quotes, wildcards, AND/OR/NOT, _missing_, _exists_)."
+        },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+        "skip": { "type": "integer", "minimum": 0, "default": 0 }
+      },
+      "required": ["dataset","q"],
+      "additionalProperties": false
+    },
+    "examples": [
+      { "dataset": "drug_label", "q": "openfda.brand_name:\"OZEMPIC\"", "limit": 5 },
+      { "dataset": "device_510k", "q": "advisory_committee:GU", "limit": 10 }
+    ]
+  }
+]
