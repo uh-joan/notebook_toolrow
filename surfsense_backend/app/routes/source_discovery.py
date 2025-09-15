@@ -3,7 +3,9 @@ API routes for Source Discovery Agent
 """
 
 import logging
+import os
 from typing import List, Optional, Dict, Any
+from sqlalchemy import select
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, WebSocket, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -15,9 +17,10 @@ from collections import defaultdict
 from langchain_core.messages import HumanMessage, AIMessage
 
 from ..agents.source_discovery import create_discovery_agent, DiscoveryRequest, DiscoveryResult, SourceSuggestion
+from ..agents.source_discovery.claude_agent import create_claude_discovery_agent
 from ..toolrow_mcp.client import ToolrowMCPManager
 from ..users import current_active_user, User
-from ..db import get_async_session, Document, DocumentType, Chat, ChatType
+from ..db import get_async_session, Document, DocumentType, Chat, ChatType, SearchSpace
 from ..tasks.document_processors.markdown_processor import add_received_markdown_file_document
 from ..services.streaming_service import StreamingService
 
@@ -244,47 +247,50 @@ CONTENT_SECTION:
 
 async def _process_discovered_source_document(
     content: str,
-    title: str, 
+    title: str,
     search_space_id: int,
     export_format: str,
     metadata: Dict[str, Any],
-    user_id: uuid.UUID,
-    db_session: AsyncSession
+    user_id: uuid.UUID
 ):
     """Process discovered source as a document (background task)."""
-    try:
-        # Use DISCOVERED_SOURCE type for all discovery-based documents
-        document_type = DocumentType.DISCOVERED_SOURCE
-        
-        # If DOCX format, convert structured content to actual DOCX
-        if export_format == "docx":
-            content = await _create_docx_content(content, title, metadata)
-            
-        # Create document entry
-        new_document = Document(
-            title=title,
-            search_space_id=search_space_id,
-            user_id=user_id,
-            content=content,
-            content_hash=str(hash(content)),
-            document_type=document_type,
-            json_metadata=metadata
-        )
-        
-        db_session.add(new_document)
-        await db_session.commit()
-        await db_session.refresh(new_document)
-        
-        logger.info(f"📄 Saved discovered source as document {new_document.id}: {title}")
-        
-        # TODO: Add to chunking/indexing queue if needed
-        
-        return new_document.id
-                
-    except Exception as e:
-        logger.error(f"❌ Error processing discovered source document: {e}")
-        await db_session.rollback()
-        return None
+    # Import here to avoid circular imports
+    from ..db import async_session_maker
+
+    async with async_session_maker() as db_session:
+        try:
+            # Use DISCOVERED_SOURCE type for all discovery-based documents
+            document_type = DocumentType.DISCOVERED_SOURCE
+
+            # If DOCX format, convert structured content to actual DOCX
+            if export_format == "docx":
+                content = await _create_docx_content(content, title, metadata)
+
+            # Create document entry
+            new_document = Document(
+                title=title,
+                search_space_id=search_space_id,
+                user_id=user_id,
+                content=content,
+                content_hash=str(hash(content)),
+                document_type=document_type,
+                json_metadata=metadata
+            )
+
+            db_session.add(new_document)
+            await db_session.commit()
+            await db_session.refresh(new_document)
+
+            logger.info(f"📄 Saved discovered source as document {new_document.id}: {title}")
+
+            # TODO: Add to chunking/indexing queue if needed
+
+            return new_document.id
+
+        except Exception as e:
+            logger.error(f"❌ Error processing discovered source document: {e}")
+            await db_session.rollback()
+            return None
 
 
 async def save_discovery_chat(
@@ -297,6 +303,7 @@ async def save_discovery_chat(
     session: AsyncSession
 ) -> Optional[int]:
     """Save discovery conversation to chat history"""
+    logger.info(f"🚨 SAVE_DISCOVERY_CHAT CALLED - Creating new chat for query: {user_query[:50]}...")
     try:
         # Create messages in the same format as researcher agent
         messages = [
@@ -709,8 +716,7 @@ async def save_discovered_source(
             request.search_space_id,
             request.export_format,
             document_metadata,
-            user.id,
-            db_session
+            user.id
         )
         
         return SaveSourceResponse(
@@ -863,6 +869,186 @@ async def format_discovery_response(
         )
 
 
+@router.post("/claude-chat")
+async def claude_discovery_chat_stream(
+    request: Request,
+    user=Depends(current_active_user),
+    db_session=Depends(get_async_session)
+):
+    """
+    Claude-powered discovery chat endpoint with streaming support.
+    Uses Claude's native tool use capabilities for more intelligent discovery.
+    """
+    try:
+        # Parse the request body
+        body = await request.json()
+        messages = body.get("messages", [])
+        data = body.get("data", {})
+        
+        # Debug: Log request data to understand what the frontend sends
+        logger.info(f"🔍 [CLAUDE-CHAT] Request data keys: {list(data.keys())}")
+        logger.info(f"🔍 [CLAUDE-CHAT] Messages count: {len(messages)}")  
+        logger.info(f"🔍 [CLAUDE-CHAT] Data content: {data}")
+        logger.info(f"🚨 DEBUG: THIS IS UPDATED CODE - ENHANCED FOLLOW-UP DETECTION ACTIVE")
+        
+        # Get the latest user message
+        if not messages:
+            raise HTTPException(status_code=400, detail="No messages provided")
+        
+        latest_message = messages[-1]
+        if latest_message["role"] != "user":
+            raise HTTPException(status_code=400, detail="Latest message must be from user")
+        
+        query = latest_message["content"]
+        search_space_id = int(data.get("search_space_id")) if data.get("search_space_id") else None
+        
+        if not search_space_id:
+            raise HTTPException(status_code=400, detail="search_space_id is required")
+        
+        # Enhanced follow-up detection - check multiple indicators
+        conversation_id = data.get("conversation_id") or data.get("conversationId") or data.get("chatId")
+        is_follow_up_by_id = conversation_id is not None
+        is_follow_up_by_history = len(messages) > 1
+        
+        # Additional checks for follow-up detection
+        assistant_messages = [msg for msg in messages if msg.get("role") == "assistant"]
+        is_follow_up_by_assistant_presence = len(assistant_messages) > 0
+        
+        # Check for recent conversations by same user (within last 10 minutes)
+        from datetime import datetime, timedelta
+        recent_time = datetime.utcnow() - timedelta(minutes=10)
+        recent_chats = await db_session.execute(
+            select(Chat)
+            .join(SearchSpace)
+            .where(
+                SearchSpace.user_id == user.id,
+                Chat.search_space_id == search_space_id,
+                Chat.type == ChatType.DISCOVERY,
+                Chat.created_at > recent_time
+            ).order_by(Chat.created_at.desc()).limit(1)
+        )
+        recent_chat = recent_chats.scalars().first()
+        is_follow_up_by_timing = recent_chat is not None
+        
+        logger.info(f"🔍 [CLAUDE-CHAT] Follow-up indicators:")
+        logger.info(f"  - conversation_id present: {is_follow_up_by_id} (value: {conversation_id})")
+        logger.info(f"  - message history > 1: {is_follow_up_by_history} ({len(messages)} messages)")
+        logger.info(f"  - has assistant messages: {is_follow_up_by_assistant_presence} ({len(assistant_messages)} assistant msgs)")
+        logger.info(f"  - recent chat exists: {is_follow_up_by_timing} (recent chat: {recent_chat.id if recent_chat else None})")
+        
+        is_follow_up = is_follow_up_by_id or is_follow_up_by_history or is_follow_up_by_assistant_presence or is_follow_up_by_timing
+        
+        # Process conversation history
+        conversation_history = messages[:-1]
+        
+        logger.info(f"🤖 Starting Claude discovery for user {user.id}: {query}")
+        if conversation_history:
+            logger.info(f"💭 Conversation history: {len(conversation_history)} previous messages")
+        
+        async def claude_event_generator():
+            try:
+                # Get user's API tokens
+                from .toolrow_settings_routes import get_user_toolrow_token
+                toolrow_api_token = await get_user_toolrow_token(str(user.id), db_session)
+                anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+                
+                # Initialize Claude Discovery Agent
+                agent = await create_claude_discovery_agent(
+                    db_session=db_session,
+                    user_id=str(user.id),
+                    toolrow_api_token=toolrow_api_token,
+                    anthropic_api_key=anthropic_api_key
+                )
+                
+                # Convert conversation history to expected format
+                chat_history = []
+                for msg in conversation_history:
+                    if msg["role"] == "user":
+                        chat_history.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        chat_history.append(AIMessage(content=msg["content"]))
+                
+                # Extract conversation session ID if available
+                conversation_id = data.get("conversation_id")
+                if conversation_id:
+                    session_id = str(conversation_id)
+                else:
+                    session_id = None
+                
+                # Stream Claude's discovery response
+                full_response = ""
+                async for chunk in agent.discover_sources(query, session_id=session_id, chat_history=chat_history):
+                    if chunk.strip():
+                        full_response += chunk
+                        # Send each chunk as streaming content
+                        yield f"0:{json.dumps(chunk)}\n"
+                
+                # Send follow-up questions if available
+                follow_up_questions = agent.get_follow_up_questions()
+                if follow_up_questions:
+                    streaming_service = StreamingService()
+                    yield streaming_service.format_further_questions_delta(follow_up_questions)
+                
+                # Send completion data
+                completion_data = {
+                    "finishReason": "stop",
+                    "usage": {"promptTokens": 0, "completionTokens": 0, "totalTokens": 0},
+                    "data": {
+                        "claude_powered": True,
+                        "tool_count": len(agent.available_tools),
+                        "response_length": len(full_response)
+                    }
+                }
+                yield f"d:{json.dumps(completion_data)}\n"
+                
+                # Use the enhanced follow-up detection from above
+                if not is_follow_up:
+                    chat_id = await save_discovery_chat(
+                        user_query=query,
+                        assistant_response=full_response,
+                        search_space_id=search_space_id,
+                        selected_tools=["claude_discovery"],
+                        discovery_data=completion_data['data'],
+                        user=user,
+                        session=db_session
+                    )
+                    logger.info(f"💾 New discovery conversation saved as chat {chat_id}")
+                else:
+                    logger.info(f"🔄 Follow-up detected - not creating new chat:")
+                    logger.info(f"  - by conversation_id: {is_follow_up_by_id}")
+                    logger.info(f"  - by message history: {is_follow_up_by_history}")
+                    logger.info(f"  - by assistant presence: {is_follow_up_by_assistant_presence}")
+                
+                logger.info(f"✅ Claude discovery completed for user {user.id}")
+                
+            except Exception as e:
+                logger.error(f"❌ Claude discovery failed: {e}")
+                error_msg = f"Claude discovery error: {str(e)}"
+                yield f"0:{json.dumps(error_msg)}\n"
+                
+            finally:
+                # Cleanup
+                if 'agent' in locals():
+                    await agent.cleanup()
+        
+        response = StreamingResponse(
+            claude_event_generator(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+                "x-vercel-ai-data-stream": "v1"
+            }
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"❌ Claude discovery endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Claude discovery failed: {str(e)}")
+
+
 @router.post("/chat")
 async def discovery_chat_stream(
     request: Request,
@@ -878,6 +1064,12 @@ async def discovery_chat_stream(
         body = await request.json()
         messages = body.get("messages", [])
         data = body.get("data", {})
+        
+        # Debug: Log all requests to /chat endpoint
+        logger.info(f"🔍 [CHAT-ENDPOINT] Request data keys: {list(data.keys())}")
+        logger.info(f"🔍 [CHAT-ENDPOINT] Messages count: {len(messages)}")
+        logger.info(f"🔍 [CHAT-ENDPOINT] Data content: {data}")
+        logger.info(f"🚨 DEBUG: /CHAT ENDPOINT REQUEST - ENHANCED FOLLOW-UP DETECTION ACTIVE")
         
         # Get the latest user message
         if not messages:
@@ -947,11 +1139,15 @@ async def discovery_chat_stream(
                 
                 logger.info(f"🔗 Passing {len(chat_history)} previous messages to discovery agent")
                 
+                # Extract conversation session ID for Claude discovery agent
+                conversation_id = data.get("conversation_id")
+                session_id = str(conversation_id) if conversation_id else None
+                
                 # Separate terminal events from final content
                 terminal_content = ""
                 final_content_started = False
                 
-                async for chunk in agent.discover_sources(query, chat_history=chat_history):
+                async for chunk in agent.discover_sources(query, session_id=session_id, chat_history=chat_history):
                     if chunk.strip():
                         chunk_lower = chunk.lower()
                         
@@ -1073,9 +1269,37 @@ async def discovery_chat_stream(
                 logger.info(f"🚀 Final content sent as text chunk: {len(final_content)} chars, {len(completion_data['data']['suggestions'])} suggestions")
                 
                 # Save discovery conversation to chat history 
-                # Only if this isn't handled by frontend chat creation
+                # Only if no conversation_id provided (new conversation)
                 disable_auto_save = data.get("disable_auto_save", False)
-                if not disable_auto_save:
+                
+                # Use enhanced follow-up detection for /chat endpoint too
+                chat_has_assistant = len([m for m in messages if m.get("role") == "assistant"]) > 0
+                
+                # Check for recent conversations by same user (within last 10 minutes)
+                from datetime import datetime, timedelta
+                recent_time = datetime.utcnow() - timedelta(minutes=10)
+                recent_chats = await db_session.execute(
+                    select(Chat)
+                    .join(SearchSpace)
+                    .where(
+                        SearchSpace.user_id == user.id,
+                        Chat.search_space_id == search_space_id,
+                        Chat.type == ChatType.DISCOVERY,
+                        Chat.created_at > recent_time
+                    ).order_by(Chat.created_at.desc()).limit(1)
+                )
+                recent_chat = recent_chats.scalars().first()
+                
+                chat_is_follow_up = conversation_id is not None or len(messages) > 1 or chat_has_assistant or recent_chat is not None
+                
+                logger.info(f"🔍 [CHAT] Follow-up detection:")
+                logger.info(f"  - conversation_id present: {conversation_id is not None} (value: {conversation_id})")
+                logger.info(f"  - message history > 1: {len(messages) > 1} ({len(messages)} messages)")
+                logger.info(f"  - has assistant messages: {chat_has_assistant}")
+                logger.info(f"  - recent chat exists: {recent_chat is not None} (recent chat: {recent_chat.id if recent_chat else None})")
+                logger.info(f"  - is_follow_up result: {chat_is_follow_up}")
+                
+                if not disable_auto_save and not chat_is_follow_up:
                     try:
                         chat_id = await save_discovery_chat(
                             user_query=query,
@@ -1087,9 +1311,11 @@ async def discovery_chat_stream(
                             session=db_session
                         )
                         if chat_id:
-                            logger.info(f"💾 Discovery conversation saved as chat {chat_id}")
+                            logger.info(f"💾 New discovery conversation saved as chat {chat_id}")
                     except Exception as e:
                         logger.error(f"❌ Failed to save discovery chat: {e}")
+                else:
+                    logger.info(f"🔄 [CHAT] Follow-up detected - not creating new chat")
                 
                 logger.info(f"✅ Streaming discovery completed for user {user.id}")
                 
