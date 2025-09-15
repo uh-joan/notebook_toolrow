@@ -76,7 +76,7 @@ export default function DiscoverPage() {
 	};
 
 	const originalHandler = useChat({
-		api: `${process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL}/api/source-discovery/chat`,
+		api: `${process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL}/api/source-discovery/claude-chat`,
 		streamProtocol: "data",
 		initialMessages: [],
 		headers: {
@@ -92,7 +92,7 @@ export default function DiscoverPage() {
 			},
 		},
 		onError: (error) => {
-			console.error("Discovery chat error:", error);
+			console.error("Claude discovery chat error:", error);
 		},
 	});
 

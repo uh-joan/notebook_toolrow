@@ -18,6 +18,103 @@ interface Message {
 	data?: any;
 }
 
+function parseClaudeStreamingText(textContent: string): TerminalEvent[] {
+	const events: TerminalEvent[] = [];
+	let eventId = 1;
+	
+	// Split content by lines and process each line
+	const lines = textContent.split('\n').filter(line => line.trim().length > 0);
+	
+	for (const line of lines) {
+		const trimmedLine = line.trim();
+		
+		// Skip separator lines
+		if (trimmedLine.match(/^[─-]+$/)) continue;
+		
+		// Parse different types of terminal events
+		let eventType: string = "info";
+		let eventText: string = trimmedLine;
+		
+		// Determine event type based on content
+		if (trimmedLine.includes('🚀 Starting Claude-powered research')) {
+			eventType = "info";
+			eventText = trimmedLine;
+		} else if (trimmedLine.includes('🔄 Connected to')) {
+			eventType = "info";
+			eventText = trimmedLine;
+		} else if (trimmedLine.includes('🧠 Claude is analyzing')) {
+			eventType = "reasoning";
+			eventText = trimmedLine;
+		} else if (trimmedLine.includes('🔧 **Using tool:')) {
+			eventType = "info";
+			eventText = trimmedLine.replace(/\*\*/g, '');
+		} else if (trimmedLine.includes('🚀 **Executing') && trimmedLine.includes('tools in parallel')) {
+			eventType = "info";
+			eventText = trimmedLine.replace(/\*\*/g, '');
+		} else if (trimmedLine.includes('🔍 **Executing research tools**')) {
+			eventType = "info";
+			eventText = "🔍 Executing research tools...";
+		} else if (trimmedLine.includes('📊 **') && trimmedLine.includes('** results:')) {
+			eventType = "info";
+			const toolMatch = trimmedLine.match(/📊 \*\*([^*]+)\*\* results:/);
+			eventText = toolMatch ? `📊 ${toolMatch[1]} results:` : trimmedLine.replace(/\*\*/g, '');
+		} else if (trimmedLine.includes('✅') && !trimmedLine.includes('Error')) {
+			eventType = "success";
+			eventText = trimmedLine;
+		} else if (trimmedLine.includes('❌') || trimmedLine.includes('Error')) {
+			eventType = "warning";
+			eventText = trimmedLine;
+		} else if (trimmedLine.includes('🧠 **Claude is synthesizing')) {
+			eventType = "reasoning";
+			eventText = trimmedLine.replace(/\*\*/g, '');
+		} else if (trimmedLine.includes('⚠️')) {
+			eventType = "warning";
+			eventText = trimmedLine;
+		} else if (trimmedLine.includes('📄 **Generating formatted response')) {
+			eventType = "info";
+			eventText = trimmedLine.replace(/\*\*/g, '');
+		} else if (trimmedLine.includes('✨ **Generating follow-up questions')) {
+			eventType = "info";
+			eventText = trimmedLine.replace(/\*\*/g, '');
+		} else if (trimmedLine.match(/^\d+\./)) {
+			// Skip numbered follow-up questions
+			continue;
+		} else if (trimmedLine.includes('Parameters:') || trimmedLine.includes('• **')) {
+			eventType = "info";
+			eventText = trimmedLine.replace(/\*\*/g, '').replace(/^• /, '');
+		}
+		
+		// Only add meaningful terminal events, skip pure content
+		if (eventText && (
+			eventText.includes('🚀') || eventText.includes('🔄') || 
+			eventText.includes('🧠') || eventText.includes('🔧') || 
+			eventText.includes('🔍') || eventText.includes('📊') || 
+			eventText.includes('✅') || eventText.includes('❌') || 
+			eventText.includes('⚠️') || eventText.includes('📄') || 
+			eventText.includes('✨') || eventText.includes('Parameters:')
+		)) {
+			events.push({
+				id: eventId++,
+				text: eventText,
+				type: eventType,
+				timestamp: new Date().toISOString()
+			});
+		}
+	}
+	
+	// If no events were parsed, add a default event
+	if (events.length === 0 && textContent.length > 0) {
+		events.push({
+			id: 1,
+			text: "🔍 Claude Discovery Agent processing query...",
+			type: "info",
+			timestamp: new Date().toISOString()
+		});
+	}
+	
+	return events;
+}
+
 export default function DiscoverTerminal({ message, open = false }: { message: Message; open?: boolean }) {
 	const [isCollapsed, setIsCollapsed] = useState(!open);
 	const [isAutoCollapsing, setIsAutoCollapsing] = useState(false);
@@ -63,15 +160,17 @@ export default function DiscoverTerminal({ message, open = false }: { message: M
 	// Extract terminal events from live annotations (like researcher agent) and fallback to final data
 	let events: TerminalEvent[] = [];
 	
+	// Get the text content from the message
+	const textContent = typeof message.content === 'string' 
+		? message.content 
+		: Array.isArray(message.content) 
+			? message.content.filter(part => part.type === 'text').map(part => part.text).join('')
+			: '';
+	
 	// First, try to get live terminal events from annotations (real-time streaming)
-	// Convert message to the format expected by getAnnotationData
 	const messageForAnnotation = {
 		...message,
-		content: typeof message.content === 'string' 
-			? message.content 
-			: Array.isArray(message.content) 
-				? message.content.filter(part => part.type === 'text').map(part => part.text).join('')
-				: ''
+		content: textContent
 	};
 	const liveEvents = getAnnotationData(messageForAnnotation, "TERMINAL_INFO") as TerminalEvent[] | null;
 	
@@ -87,6 +186,9 @@ export default function DiscoverTerminal({ message, open = false }: { message: M
 				timestamp: eventData.timestamp || event.timestamp
 			};
 		});
+	} else if (textContent && textContent.length > 0) {
+		// Parse Claude's streaming text content into terminal events
+		events = parseClaudeStreamingText(textContent);
 	} else if (message.data?.terminal_events && message.data.terminal_events.length > 0) {
 		// Fallback to final terminal events from backend
 		events = message.data.terminal_events.map((event: any) => ({
@@ -96,25 +198,37 @@ export default function DiscoverTerminal({ message, open = false }: { message: M
 			timestamp: event.timestamp
 		}));
 	} else if (message.data) {
-		// Fallback: generate events from discovery result
+		// Enhanced fallback: generate events from Claude discovery result
 		const result = message.data;
 		let eventId = 1;
 
+		// Initial query processing
 		events.push({
 			id: eventId++,
-			text: `Starting source discovery for: "${result.request?.query || 'unknown query'}"`,
+			text: `🚀 Claude Discovery Agent initialized for query: "${result.request?.query || result.query || 'discovery request'}"`,
 			type: "info"
 		});
 
-		if (result.reasoning_steps && result.reasoning_steps.length > 0) {
+		// Query analysis if available
+		if (result.query_type || result.complexity) {
 			events.push({
 				id: eventId++,
-				text: `🧠 Sequential reasoning completed with ${result.reasoning_steps.length} steps`,
+				text: `🔍 Query analyzed: Type=${result.query_type || 'general'}, Complexity=${result.complexity || 'moderate'}`,
 				type: "info"
 			});
 		}
 
-		if (result.suggestions && result.suggestions.length > 0) {
+		// Tool execution events
+		if (result.tools_executed && Array.isArray(result.tools_executed)) {
+			result.tools_executed.forEach((tool: any) => {
+				events.push({
+					id: eventId++,
+					text: `🔧 Executing ${tool.name || tool}: ${tool.status || 'processing'}`,
+					type: tool.status === 'success' ? 'success' : 'info'
+				});
+			});
+		} else if (result.suggestions && result.suggestions.length > 0) {
+			// Legacy format - extract tool usage from suggestions
 			const tools = new Set();
 			result.suggestions.forEach((suggestion: any) => {
 				if (suggestion.metadata?.tags) {
@@ -124,7 +238,7 @@ export default function DiscoverTerminal({ message, open = false }: { message: M
 			
 			events.push({
 				id: eventId++,
-				text: `🎯 Selected ${tools.size} tools: [${Array.from(tools).join(", ")}]`,
+				text: `🎯 Claude selected ${tools.size} tools: [${Array.from(tools).join(", ")}]`,
 				type: "info"
 			});
 
@@ -140,9 +254,20 @@ export default function DiscoverTerminal({ message, open = false }: { message: M
 			});
 		}
 
+		// Performance metrics if available
+		if (result.performance_metrics) {
+			const metrics = result.performance_metrics;
+			events.push({
+				id: eventId++,
+				text: `📊 Performance: ${metrics.total_duration_ms}ms, ${metrics.token_usage?.total || 0} tokens, ${metrics.tool_metrics?.tools_used || 0} tools`,
+				type: "info"
+			});
+		}
+
+		// Final completion
 		events.push({
 			id: eventId++,
-			text: `📊 Discovery completed: ${result.total_found || 0} sources found in ${result.processing_time_ms || 0}ms`,
+			text: `🎉 Discovery completed: ${result.total_found || result.suggestions?.length || 0} sources found${result.processing_time_ms ? ` in ${result.processing_time_ms}ms` : ''}`,
 			type: "success"
 		});
 	}
@@ -184,7 +309,7 @@ export default function DiscoverTerminal({ message, open = false }: { message: M
 					<div className="w-3 h-3 rounded-full bg-green-500"></div>
 				</div>
 				<div className="text-gray-400 text-xs ml-2 flex-1">
-					Discovery Process Terminal ({events.length} events)
+					Claude Discovery Terminal ({events.length} events)
 					{isAutoCollapsing && (
 						<span className="ml-2 text-yellow-400 animate-pulse">
 							Auto-collapsing...
@@ -220,18 +345,25 @@ export default function DiscoverTerminal({ message, open = false }: { message: M
 			{!isCollapsed && (
 				<div ref={bottomRef} className="h-64 overflow-y-auto p-4 space-y-1 bg-gray-900">
 					{events.map((event, index) => (
-						<div key={`${event.id}-${index}`} className="text-green-400">
-							<span className="text-blue-400">$</span>
-							<span className={`ml-2 ${
-								event.type === "info" ? "text-yellow-400" : 
+						<div key={`${event.id}-${index}`} className="text-green-400 flex items-start">
+							<span className="text-blue-400 flex-shrink-0">$</span>
+							<span className={`ml-2 flex-shrink-0 ${
+								event.type === "info" ? "text-blue-400" : 
 								event.type === "success" ? "text-green-400" :
 								event.type === "reasoning" ? "text-purple-400" :
+								event.type === "warning" ? "text-orange-400" :
 								"text-gray-400"
 							}`}>
 								[{event.type}]
 							</span>
-							<span className="text-gray-300 ml-4 mt-1 pl-2 border-l-2 border-gray-600">
-								{event.text}...
+							<span className="text-gray-300 ml-2 flex-1">
+								{event.timestamp && (
+									<span className="text-xs text-gray-500 mr-2">
+										{new Date(event.timestamp).toLocaleTimeString()}
+									</span>
+								)}
+								{event.text}
+								{event.type !== "success" && event.type !== "warning" && !event.text.endsWith('...') && "..."}
 							</span>
 						</div>
 					))}

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useParams } from "next/navigation";
 import DiscoverTerminal from "./DiscoverTerminal";
+import PerformanceMetrics from "./PerformanceMetrics";
 import { Label } from "@/components/ui/label";
 // import { useToast } from "@/hooks/use-toast";
 
@@ -277,6 +278,12 @@ export default function DiscoverChatMessages({
 					</div>
 				</div>
 
+				{/* Performance Metrics for Claude agent responses */}
+				{isAssistant && message.data?.performance_metrics && (
+					<div className="ml-8">
+						<PerformanceMetrics message={message} compact={false} />
+					</div>
+				)}
 
 				{/* Action buttons for assistant messages */}
 				{isAssistant && (
@@ -465,12 +472,18 @@ export default function DiscoverChatMessages({
 				{messages.length === 0 ? (
 					<div className="text-center text-muted-foreground py-8">
 						<div className="space-y-4">
-							<h2 className="text-2xl font-bold text-foreground">SourceBook Discover</h2>
+							<div className="flex items-center justify-center gap-3 mb-4">
+								<h2 className="text-2xl font-bold text-foreground">SourceBook Discover</h2>
+								<div className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+									<div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+									Powered by Claude
+								</div>
+							</div>
 							<p className="text-base max-w-2xl mx-auto">
-								Fetch live sources via Toolrow MCP (FDA, ct.gov, PubMed, WHO, SEC, codes)—auto-cited with one-click Add to Sources.
+								Intelligent discovery with Claude AI + Toolrow MCP (FDA, ct.gov, PubMed, WHO, SEC, codes)—auto-cited with one-click Add to Sources.
 							</p>
 							<div className="text-sm space-y-1 mt-4">
-								<p className="font-medium text-foreground">Try asking::</p>
+								<p className="font-medium text-foreground">Try asking:</p>
 									<p>"ICD-10 & MeSH for obesity"</p>
 									<p>"US FDA drugs for T2D"</p>
 									<p>"Phase 2/3 trials recruiting in EU"</p>
