@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
 from app.config import config
 
 logger = logging.getLogger(__name__)
@@ -32,13 +33,17 @@ class MCPServerProcess:
             return True
             
         try:
+            # Ensure environment variables are loaded from .env file
+            load_dotenv()
+            
             # Prepare environment variables
             env = os.environ.copy()
             for env_var in self.config.get("env", []):
                 if env_var in os.environ:
                     env[env_var] = os.environ[env_var]
+                    logger.info(f"✅ Found environment variable {env_var} for MCP server {self.name}")
                 else:
-                    logger.warning(f"Environment variable {env_var} not found for MCP server {self.name}")
+                    logger.warning(f"❌ Environment variable {env_var} not found for MCP server {self.name}")
             
             # Start the process
             command = [self.config["command"]] + self.config.get("args", [])

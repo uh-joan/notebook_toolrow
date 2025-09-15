@@ -4,9 +4,12 @@
       "transport": "stdio",
       "command": "node",
       "args": [
-        "toolrow_servers/toolrow_mcp_server.js"
+        "/Users/joan.saez-pons/code/toolrow/toolrow_mcp_server.js"
       ],
-      "env": {}
+      "env": [
+        "TOOLROW_API_TOKEN",
+        "TOOLROW_API_BASE"
+      ]
     }
   }
 }
